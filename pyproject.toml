@@ -1,0 +1,12 @@
+[project]
+name = "jinyoung-toolkit"
+version = "2.0.0"
+description = "한국어 리뷰 분석 + AutoML 리포트 생성기"
+requires-python = ">=3.11"
+
+[tool.black]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "review_analyzer/tests", "automl_reporter/tests"]
+asyncio_mode = "auto"
