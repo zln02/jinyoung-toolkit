@@ -1,0 +1,11 @@
+services:
+  toolkit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./output:/app/output
+    environment:
+      - LOG_ENV=production
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
