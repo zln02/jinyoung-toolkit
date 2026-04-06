@@ -1,0 +1,32 @@
+name: naver_shopping
+display_name: "네이버 쇼핑 리뷰"
+description: "네이버 쇼핑 상품 리뷰 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 3
+  scroll_to_bottom: true
+
+pagination:
+  type: click
+  next_button_selector: "a.pagination__next"
+  max_pages: 50
+
+selectors:
+  container: "div.reviewItems_review__container"
+  fields:
+    reviewer: "span.reviewItems_reviewer"
+    rating: "span.reviewItems_average"
+    date: "span.reviewItems_date"
+    content: "div.reviewItems_review__text"
+    product_option: "span.reviewItems_option"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 30
+  delay_between_pages: 2.0

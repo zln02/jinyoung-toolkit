@@ -1,0 +1,119 @@
+# ============================================================
+# custom_template.yaml — 사용자 커스텀 프리셋 템플릿
+#
+# 이 파일을 복사하여 새 파일명으로 저장한 뒤 각 항목을 수정하세요.
+# 예: cp custom_template.yaml my_site.yaml
+#
+# 필수 항목: name, display_name, selectors.container, selectors.fields
+# 나머지 항목은 선택적이며 생략 가능합니다.
+# ============================================================
+
+# [필수] 프리셋 고유 식별자. 파일명(확장자 제외)과 일치시키세요.
+name: custom_template
+
+# [필수] UI 및 로그에 표시될 사람이 읽기 좋은 이름
+display_name: "커스텀 사이트 리뷰"
+
+# [선택] 이 프리셋의 용도를 설명하는 자유 텍스트
+description: "사용자 정의 리뷰 수집 템플릿"
+
+# ============================================================
+# driver 설정 — 크롤러 드라이버 종류 및 동작 방식
+# ============================================================
+driver:
+  # type: selenium | playwright | httpx
+  # - selenium: 자바스크립트 렌더링 필요 시 (동적 페이지)
+  # - playwright: 비동기 브라우저 자동화 (selenium 대안)
+  # - httpx: 정적 HTML 응답으로 충분할 때 (빠름)
+  type: selenium
+
+  # 브라우저 창을 띄우지 않고 실행 (서버 환경에서 true 권장)
+  headless: true
+
+  # 페이지 로드 후 추가 대기 시간(초) — 동적 컨텐츠 렌더링 여유 시간
+  wait_seconds: 3
+
+  # 페이지 하단까지 스크롤 (무한 스크롤 방식 사이트에서 true)
+  scroll_to_bottom: false
+
+  # [선택] 사용자 에이전트 문자열 — 기본값은 드라이버가 자동 설정
+  # user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# ============================================================
+# pagination 설정 — 여러 페이지에 걸친 리뷰 수집 방식
+# ============================================================
+pagination:
+  # type: click | url_param | infinite_scroll | none
+  # - click: "다음 페이지" 버튼 클릭
+  # - url_param: URL 쿼리 파라미터로 페이지 번호 변경 (?page=2)
+  # - infinite_scroll: 스크롤 시 자동 로드
+  # - none: 단일 페이지만 수집
+  type: click
+
+  # [click 타입 시 필수] 다음 페이지 버튼의 CSS 셀렉터
+  next_button_selector: "a.next-page"
+
+  # [url_param 타입 시 필수] URL 템플릿 ({page} 에 페이지 번호 치환)
+  # url_template: "https://example.com/reviews?page={page}"
+
+  # 최대 수집 페이지 수 (0이면 마지막 페이지까지 수집)
+  max_pages: 10
+
+# ============================================================
+# selectors 설정 — [필수] CSS 셀렉터 정의
+# ============================================================
+selectors:
+  # [필수] 리뷰 1건을 감싸는 컨테이너 요소의 CSS 셀렉터
+  # 이 셀렉터로 찾은 각 요소 내부에서 아래 fields를 검색합니다.
+  container: "div.review-item"
+
+  # [필수] 수집할 필드 목록 (최소 1개 이상)
+  # 키: 수집 결과 딕셔너리에서 사용할 필드명
+  # 값: 컨테이너 내부에서 해당 요소를 찾는 CSS 셀렉터
+  fields:
+    # 리뷰 작성자 이름
+    reviewer: "span.author-name"
+
+    # 별점 (텍스트 또는 aria-label 속성으로 추출)
+    rating: "span.star-rating"
+
+    # 리뷰 작성일
+    date: "span.review-date"
+
+    # 리뷰 본문 텍스트
+    content: "div.review-body"
+
+    # [선택] 추가 필드 예시 — 필요 없으면 삭제하세요
+    # product_option: "span.option-info"
+    # helpful_count: "button.helpful-btn > span"
+    # image_urls: "img.review-image"
+
+# ============================================================
+# analysis 설정 — AI 분석 옵션
+# ============================================================
+analysis:
+  # 감성 분석에 사용할 필드명 (fields 키와 일치해야 함)
+  text_column: content
+
+  # 별점 데이터가 있는 필드명 (없으면 생략)
+  rating_column: rating
+
+  # sentiment_method: rating_based | llm | hybrid
+  # - rating_based: 별점으로만 긍/부정 판단 (빠름, 비용 없음)
+  # - llm: LLM으로 본문 분석 (정확하나 API 비용 발생)
+  # - hybrid: 별점 + LLM 혼합
+  sentiment_method: rating_based
+
+  # [선택] rating 값에서 숫자를 추출할 정규식 패턴
+  # 예: "별점 4점" → "(\d+)" → 4
+  # rating_parse_pattern: "(\\d+(\\.\\d+)?)"
+
+# ============================================================
+# rate_limit 설정 — 크롤링 속도 제한 (서버 부하 방지)
+# ============================================================
+rate_limit:
+  # 분당 최대 요청 수 — 낮을수록 차단 위험 감소
+  requests_per_minute: 20
+
+  # 페이지 이동 사이 대기 시간(초)
+  delay_between_pages: 2.0

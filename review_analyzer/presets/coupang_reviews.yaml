@@ -1,0 +1,34 @@
+name: coupang_reviews
+display_name: "쿠팡 상품 리뷰"
+description: "쿠팡 상품 상세 페이지 고객 리뷰 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 4
+  scroll_to_bottom: true
+
+pagination:
+  type: click
+  next_button_selector: "button.sdp-review__article__page__nav__btn--next"
+  max_pages: 30
+
+selectors:
+  container: "article.sdp-review__article__list"
+  fields:
+    reviewer: "span.sdp-review__article__list__info__user__name"
+    rating: "div.sdp-review__article__list__info__product-info__star-orange"
+    date: "div.sdp-review__article__list__info__product-info__reg-date"
+    content: "div.sdp-review__article__list__review__content"
+    product_option: "div.sdp-review__article__list__info__product-info__option"
+    helpful_count: "span.sdp-review__article__list__help__count"
+    image_count: "span.sdp-review__article__list__attachment__count"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 20
+  delay_between_pages: 3.0

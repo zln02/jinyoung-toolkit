@@ -44,10 +44,19 @@ def setup_logging(log_level: str = "INFO") -> None:
 
     level: int = getattr(logging, log_level.upper(), logging.INFO)
 
+    def _add_logger_name_safe(
+        logger: Any, method_name: str, event_dict: dict[str, Any]
+    ) -> dict[str, Any]:
+        """PrintLogger 호환 logger name 프로세서."""
+        event_dict.setdefault(
+            "logger", getattr(logger, "name", None) or ""
+        )
+        return event_dict
+
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
+        _add_logger_name_safe,
         structlog.processors.CallsiteParameterAdder(
             [
                 structlog.processors.CallsiteParameter.FILENAME,

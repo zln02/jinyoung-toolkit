@@ -1,0 +1,36 @@
+name: google_play
+display_name: "구글 플레이 스토어 리뷰"
+description: "Google Play Store 앱 리뷰 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 5
+  scroll_to_bottom: true
+
+pagination:
+  # 구글 플레이는 "더 보기" 버튼 클릭 방식으로 추가 리뷰를 로드한다
+  type: click
+  next_button_selector: "button.RveJvd"
+  max_pages: 20
+
+selectors:
+  container: "div.RHo1pe"
+  fields:
+    reviewer: "span.X43Kjb"
+    rating: "div.pf5lIe > div[aria-label]"
+    date: "span.p2TkOb"
+    content: "span.review-full-text, span[jsname='bN97Pc']"
+    thumbs_up_count: "div.jUL89d > span"
+    developer_reply: "div.ocpBU"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  # rating 필드가 aria-label 속성값이므로 숫자 파싱 전처리 필요
+  rating_parse_pattern: "(\\d+(\\.\\d+)?)"
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 15
+  delay_between_pages: 4.0
