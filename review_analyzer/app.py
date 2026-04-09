@@ -735,29 +735,42 @@ def _render_results(result: AnalysisResult) -> None:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # 키워드 Top 10
+    # 키워드 Top 10 (이슈 #7a — 막대 차트 + 표는 expander)
     st.subheader("키워드 Top 10")
     col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("**긍정 키워드**")
-        pos_top10 = result.keywords_positive[:10]
-        if pos_top10:
-            pos_df = pd.DataFrame(pos_top10, columns=["키워드", "점수"])
-            pos_df["점수"] = pos_df["점수"].round(4)
-            st.dataframe(pos_df, hide_index=True, use_container_width=True)
-        else:
+    def _render_keyword_block(
+        title: str,
+        items: list[tuple[str, float]],
+        bar_color: str,
+    ) -> None:
+        st.markdown(f"**{title}**")
+        if not items:
             st.info("데이터 없음")
+            return
+        kw_df = pd.DataFrame(items, columns=["키워드", "점수"])
+        kw_df["점수"] = kw_df["점수"].round(4)
+        fig = px.bar(
+            kw_df,
+            x="점수",
+            y="키워드",
+            orientation="h",
+            color_discrete_sequence=[bar_color],
+            height=320,
+        )
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=20, b=0),
+            yaxis={"categoryorder": "total ascending"},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        with st.expander("표로 보기", expanded=False):
+            st.dataframe(kw_df, hide_index=True, use_container_width=True)
+
+    with col1:
+        _render_keyword_block("긍정 키워드", result.keywords_positive[:10], "#4CAF50")
 
     with col2:
-        st.markdown("**부정 키워드**")
-        neg_top10 = result.keywords_negative[:10]
-        if neg_top10:
-            neg_df = pd.DataFrame(neg_top10, columns=["키워드", "점수"])
-            neg_df["점수"] = neg_df["점수"].round(4)
-            st.dataframe(neg_df, hide_index=True, use_container_width=True)
-        else:
-            st.info("데이터 없음")
+        _render_keyword_block("부정 키워드", result.keywords_negative[:10], "#F44336")
 
     # 워드클라우드
     st.subheader("워드클라우드")

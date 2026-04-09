@@ -17,9 +17,11 @@ from shared.logger import get_logger
 from shared.ui_components import (
     render_dataframe_preview,
     render_download_button,
+    render_error,
     render_file_uploader,
     render_header,
     render_metrics,
+    render_step_indicator,
 )
 
 log = get_logger(__name__)
@@ -50,6 +52,30 @@ _TASK_TYPE_KR: dict[TaskType, str] = {
     TaskType.CLUSTERING: "군집화",
 }
 
+
+# ---------------------------------------------------------------------------
+# 샘플 데이터 헬퍼 (이슈 #3)
+# ---------------------------------------------------------------------------
+
+
+@st.cache_data
+def _load_sample_tabular_df() -> pd.DataFrame | None:
+    """샘플 tabular CSV 로드. rerun마다 디스크 IO 방지.
+
+    리뷰 분석기와 동일하게 ``tests/fixtures/sample_tabular.csv`` 를 사용한다.
+    파일이 없으면 None.
+    """
+    sample_path = (
+        Path(__file__).resolve().parent.parent
+        / "tests"
+        / "fixtures"
+        / "sample_tabular.csv"
+    )
+    if not sample_path.exists():
+        return None
+    return pd.read_csv(sample_path, encoding="utf-8-sig")
+
+
 # ---------------------------------------------------------------------------
 # Step 1 — 파일 업로드
 # ---------------------------------------------------------------------------
@@ -58,15 +84,35 @@ _TASK_TYPE_KR: dict[TaskType, str] = {
 def _render_step1_upload() -> pd.DataFrame | None:
     """Step 1: CSV 파일 업로드 섹션을 렌더링한다.
 
+    이슈 #3: 리뷰 분석기와 동일한 톤으로 "샘플로 먼저 보기" 옵션 제공.
+
     Returns:
-        업로드 및 파싱에 성공한 DataFrame. 없으면 None.
+        업로드 또는 샘플 로드에 성공한 DataFrame. 없으면 None.
     """
     st.subheader("Step 1. 데이터 업로드")
 
-    df = render_file_uploader()
+    input_mode = st.radio(
+        "데이터 입력 방식",
+        options=["파일로 올리기 (CSV)", "샘플로 먼저 보기"],
+        horizontal=True,
+        key="aml_input_mode",
+    )
 
-    if df is not None:
-        render_dataframe_preview(df)
+    df: pd.DataFrame | None = None
+
+    if input_mode == "파일로 올리기 (CSV)":
+        df = render_file_uploader()
+        if df is not None:
+            render_dataframe_preview(df)
+    else:
+        df = _load_sample_tabular_df()
+        if df is not None:
+            st.success(
+                f"샘플 데이터: {len(df)}건, {len(df.columns)}개 컬럼"
+            )
+            st.dataframe(df.head())
+        else:
+            st.warning("샘플 데이터 파일이 없습니다.")
 
     return df
 
@@ -239,6 +285,17 @@ def _render_results(result: AutoMLResult) -> None:
 
     # ── 모델 비교 테이블 ─────────────────────────────────────────────────
     st.subheader("모델 비교")
+
+    with st.expander("📊 메트릭 설명"):
+        st.markdown(
+            "- **ACCURACY**: 전체 예측 중 맞춘 비율\n"
+            "- **F1**: 정밀도와 재현율의 조화 평균\n"
+            "- **PRECISION**: 양성 예측 중 실제 양성 비율\n"
+            "- **RECALL**: 실제 양성 중 양성으로 예측한 비율\n"
+            "- **R2**: 회귀 모델의 설명력 (1에 가까울수록 좋음)\n"
+            "- **RMSE**: 평균 제곱근 오차 (작을수록 좋음)\n"
+            "- **SILHOUETTE**: 군집 간 분리도 (-1~1, 1에 가까울수록 좋음)"
+        )
 
     all_metric_keys: list[str] = []
     for mr in result.model_results:
@@ -429,16 +486,28 @@ def _render_download_section(result: AutoMLResult) -> None:
 
 def main() -> None:
     """Streamlit 앱 진입점."""
-    st.set_page_config(
-        page_title="AutoML 리포트",
-        page_icon="🤖",
-        layout="wide",
-    )
+    try:
+        st.set_page_config(
+            page_title="AutoML 리포트",
+            page_icon="🤖",
+            layout="wide",
+        )
+    except st.errors.StreamlitAPIException:
+        pass  # 루트 허브에서 이미 호출됨
 
     render_header(
         title="AutoML 리포트",
         subtitle="CSV만 올리면 AI가 모델을 만들어 줍니다.",
     )
+
+    # Step indicator
+    if st.session_state.get(_SESSION_RESULT) is not None:
+        current_step = 3
+    elif st.session_state.get(_SESSION_DF) is not None:
+        current_step = 2
+    else:
+        current_step = 1
+    render_step_indicator(current_step, 3, ["데이터 업로드", "분석 설정", "결과 확인"])
 
     # Step 1: 파일 업로드
     df = _render_step1_upload()
@@ -476,7 +545,7 @@ def main() -> None:
                 )
             except Exception as exc:
                 log.error("AutoML_실행_실패", error=str(exc))
-                st.error(f"AutoML 실행 중 오류가 발생했습니다: {exc}")
+                render_error(exc, context="AutoML")
                 return
 
     # 결과 표시
