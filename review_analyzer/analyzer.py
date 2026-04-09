@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 import tempfile
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -13,6 +17,7 @@ import pandas as pd
 
 matplotlib.use("Agg")
 
+from shared.config import get_settings
 from shared.delivery import DeliveryPackage
 from shared.exporters import export_csv
 from shared.korean_nlp import KoreanTextProcessor
@@ -81,6 +86,20 @@ class AnalysisResult:
     wordcloud_path: Path | None
     insights: list[str] = field(default_factory=list)
 
+    @classmethod
+    def empty(cls, reason: str = "데이터 부족") -> "AnalysisResult":
+        """크롤링 0건/분석 실패 등 빈 상태의 표준 fallback 인스턴스."""
+        return cls(
+            sentiment_distribution={"positive": 0, "negative": 0, "neutral": 0},
+            keywords_positive=[],
+            keywords_negative=[],
+            rating_distribution={},
+            total_reviews=0,
+            avg_rating=0.0,
+            wordcloud_path=None,
+            insights=[reason],
+        )
+
 
 class ReviewAnalyzer:
     """리뷰 분석기 — 전처리→감성분석→키워드추출→시각화→PDF 리포트."""
@@ -89,11 +108,29 @@ class ReviewAnalyzer:
         self,
         text_column: str = "content",
         rating_column: str | None = "rating",
+        rating_parse_pattern: str | None = None,
+        cache_root: Path | None = None,
     ) -> None:
-        """초기화. KoreanTextProcessor 인스턴스 생성."""
+        """초기화. KoreanTextProcessor 인스턴스 생성.
+
+        Args:
+            text_column: 리뷰 본문 컬럼명.
+            rating_column: 평점 컬럼명. 없으면 None.
+            rating_parse_pattern: 평점 파싱용 regex.
+            cache_root: 워드클라우드 PNG를 보존할 루트 디렉토리.
+                None이면 ``get_settings().output_dir / "wordcloud_cache"`` 사용.
+                Streamlit rerun/다운로드 후에도 PNG가 살아있도록 영구 디렉토리에 저장한다.
+        """
         self.text_column = text_column
         self.rating_column = rating_column
+        self.rating_parse_pattern = rating_parse_pattern
+        self._rating_regex = re.compile(rating_parse_pattern) if rating_parse_pattern else None
         self.nlp = KoreanTextProcessor()
+        self.cache_root: Path = (
+            cache_root
+            if cache_root is not None
+            else get_settings().output_dir / "wordcloud_cache"
+        )
 
     def preprocess(self, df: pd.DataFrame) -> pd.DataFrame:
         """전처리: 중복제거, 결측처리, 텍스트 정규화.
@@ -142,12 +179,58 @@ class ReviewAnalyzer:
         logger.info("감성 분포: %s", counts)
         return df
 
-    @staticmethod
-    def _sentiment_by_rating(rating: Any) -> str:
-        """평점으로 감성 분류."""
-        try:
-            r = float(rating)
-        except (TypeError, ValueError):
+    def _parse_rating_value(self, raw: Any) -> float | None:
+        """원시 평점 값(숫자 or 문자열)을 float으로 변환.
+
+        - 숫자면 그대로 float 반환
+        - 문자열이면 rating_parse_pattern regex로 첫 매칭 그룹 추출
+        - 100점 척도("만족도 : 100%", "96%" 등)는 자동으로 5점 척도로 변환
+          (값이 6 이상이면 100점 척도로 간주하여 /20)
+        - 실패 시 None
+        """
+        if raw is None:
+            return None
+        # 이미 숫자
+        if isinstance(raw, (int, float)):
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                return None
+            if pd.isna(val):
+                return None
+        else:
+            text = str(raw).strip()
+            if not text or text.lower() == "nan":
+                return None
+            if self._rating_regex is not None:
+                m = self._rating_regex.search(text)
+                if not m:
+                    return None
+                try:
+                    # 첫 그룹 사용. 그룹 없으면 전체 매치.
+                    val = float(m.group(1) if m.groups() else m.group(0))
+                except (TypeError, ValueError, IndexError):
+                    return None
+            else:
+                # 패턴 없으면 기존처럼 직접 float 시도
+                try:
+                    val = float(text)
+                except (TypeError, ValueError):
+                    return None
+        # 100점 척도 → 5점 척도
+        if val > 5.5:
+            val = val / 20.0
+        # 0~5 클램핑
+        if val < 0:
+            return None
+        if val > 5.0:
+            val = 5.0
+        return val
+
+    def _sentiment_by_rating(self, rating: Any) -> str:
+        """평점으로 감성 분류 (5점 척도 기준)."""
+        r = self._parse_rating_value(rating)
+        if r is None:
             return "neutral"
         if r >= 4:
             return "positive"
@@ -267,9 +350,13 @@ class ReviewAnalyzer:
         """전체 분석 파이프라인.
 
         preprocess → analyze_sentiment → extract_keywords → generate_wordcloud → generate_insights
-        임시 디렉토리에 워드클라우드 저장.
+        워드클라우드 PNG는 ``self.cache_root`` 하위 인스턴스 전용 디렉토리에 영속 저장한다.
+        Streamlit rerun이나 PDF 빌드 단계에서도 동일한 경로가 유효해야 하기 때문이다.
         """
         logger.info("분석 파이프라인 시작")
+
+        # best-effort: 24h 이상 지난 캐시 인스턴스 디렉토리 청소
+        self._sweep_stale_cache(max_age_seconds=24 * 3600)
 
         df = self.preprocess(df)
         df = self.analyze_sentiment(df)
@@ -285,30 +372,70 @@ class ReviewAnalyzer:
         rating_dist: dict[int, int] = {}
         avg_rating = 0.0
         if self.rating_column and self.rating_column in df.columns:
-            rating_series = pd.to_numeric(df[self.rating_column], errors="coerce")
+            rating_series = df[self.rating_column].apply(self._parse_rating_value)
+            valid = rating_series.dropna()
             rating_dist = (
-                rating_series.dropna().astype(int).value_counts().sort_index().to_dict()
+                valid.round().astype(int).value_counts().sort_index().to_dict()
+                if not valid.empty else {}
             )
-            avg_rating = float(rating_series.mean()) if not rating_series.empty else 0.0
+            avg_rating = float(valid.mean()) if not valid.empty else 0.0
 
-        with tempfile.TemporaryDirectory() as tmp:
-            wc_paths = self.generate_wordcloud(df, Path(tmp))
-            wc_all = wc_paths.get("all")
+        instance_dir = self._make_instance_dir()
+        wc_paths = self.generate_wordcloud(df, instance_dir)
+        wc_all = wc_paths.get("all")
 
-            result = AnalysisResult(
-                sentiment_distribution=sentiment_dist,
-                keywords_positive=keywords.get("positive", []),
-                keywords_negative=keywords.get("negative", []),
-                rating_distribution=rating_dist,
-                total_reviews=len(df),
-                avg_rating=avg_rating,
-                wordcloud_path=wc_all,
-                insights=[],
-            )
-            result.insights = self.generate_insights(result)
+        result = AnalysisResult(
+            sentiment_distribution=sentiment_dist,
+            keywords_positive=keywords.get("positive", []),
+            keywords_negative=keywords.get("negative", []),
+            rating_distribution=rating_dist,
+            total_reviews=len(df),
+            avg_rating=avg_rating,
+            wordcloud_path=wc_all,
+            insights=[],
+        )
+        result.insights = self.generate_insights(result)
 
         logger.info("분석 파이프라인 완료")
         return result
+
+    def _make_instance_dir(self) -> Path:
+        """워드클라우드 저장용 인스턴스 디렉토리 생성.
+
+        cache_root 하위에 uuid12 서브디렉토리를 만든다.
+        cache_root mkdir 권한 실패 시 tempfile.mkdtemp()로 1회 폴백한다.
+        """
+        try:
+            self.cache_root.mkdir(parents=True, exist_ok=True)
+            instance_dir = self.cache_root / uuid.uuid4().hex[:12]
+            instance_dir.mkdir(parents=True, exist_ok=True)
+            return instance_dir
+        except OSError as exc:
+            logger.warning(
+                "워드클라우드 캐시 디렉토리 생성 실패 — 임시 디렉토리로 폴백: %s",
+                exc,
+            )
+            return Path(tempfile.mkdtemp(prefix="wordcloud_"))
+
+    def _sweep_stale_cache(self, max_age_seconds: int) -> None:
+        """cache_root 하위 디렉토리 중 mtime이 max_age_seconds 이상 지난 것 삭제.
+
+        실패는 무시 (best-effort).
+        """
+        try:
+            if not self.cache_root.exists():
+                return
+            now = time.time()
+            for child in self.cache_root.iterdir():
+                if not child.is_dir():
+                    continue
+                try:
+                    if now - child.stat().st_mtime > max_age_seconds:
+                        shutil.rmtree(child, ignore_errors=True)
+                except OSError:
+                    continue
+        except OSError:
+            pass
 
     def generate_report(self, result: AnalysisResult, output_path: Path) -> Path:
         """PDF 리포트 생성. ReportGenerator 사용.
