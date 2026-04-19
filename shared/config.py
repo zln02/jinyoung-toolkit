@@ -28,6 +28,12 @@ class AppSettings(BaseSettings):
         extra="ignore",
     )
 
+    # --- UI ---
+    uis_url: str = Field(
+        default="",
+        description="Urban Immune System 대시보드 URL (빈 문자열이면 링크 미표시)",
+    )
+
     # --- 로깅 ---
     log_level: str = Field(
         default="INFO",
@@ -52,7 +58,7 @@ class AppSettings(BaseSettings):
 
     # --- 크롤링 ---
     crawl_delay_seconds: float = Field(
-        default=1.0,
+        default=1.5,
         ge=0.0,
         description="요청 사이 대기 시간 (초). 서버 부하 방지용",
     )
@@ -73,13 +79,23 @@ class AppSettings(BaseSettings):
         description="OpenAI API 키. 미설정 시 LLM 기능 비활성화",
     )
 
+    # --- Anthropic (자동 셀렉터 추론용) ---
+    anthropic_api_key: Optional[str] = Field(
+        default=None,
+        description="Anthropic Claude API 키 (자동 셀렉터 추론용)",
+    )
+    selector_inference_model: str = Field(
+        default="claude-haiku-4-5-20251001",
+        description="자동 셀렉터 추론에 사용할 Claude 모델",
+    )
+
     # --- 감성 분석 ---
     sentiment_model: str = Field(
-        default="snunlp/KR-FinBert-SC",
-        description="HuggingFace 감성 분석 모델 식별자",
+        default="gpt-4o-mini",
+        description="감성 분석 모델 (Level 3 LLM API용, 미구현 시 무시됨)",
     )
     sentiment_batch_size: int = Field(
-        default=32,
+        default=10,
         gt=0,
         description="감성 분석 배치 크기",
     )
@@ -90,7 +106,7 @@ class AppSettings(BaseSettings):
         description="재현성 보장을 위한 난수 시드",
     )
     test_size: float = Field(
-        default=0.2,
+        default=0.3,
         gt=0.0,
         lt=1.0,
         description="학습/테스트 분할 비율 (테스트 비율, 0 < test_size < 1)",
