@@ -1,0 +1,31 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+name: melon_song
+display_name: "멜론 노래 댓글"
+description: "멜론 곡 정보 페이지 댓글 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 3
+  scroll_to_bottom: false
+
+pagination:
+  type: click
+  next_button_selector: "a.btn_next"
+  max_pages: 30
+
+selectors:
+  container: "div.cmt_list_wrap li.d_cmt_list"
+  fields:
+    reviewer: "a.ellipsis"
+    content: "div.cmt_text"
+    date: "span.date"
+    likes: "button.button_etc.like span.cnt"
+
+analysis:
+  text_column: content
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 25
+  delay_between_pages: 2.0

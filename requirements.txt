@@ -18,7 +18,7 @@ wordcloud>=1.9
 # Visualization
 matplotlib>=3.8
 seaborn>=0.13
-plotly>=5.18
+plotly>=5.18,<6.0
 
 # Report
 fpdf2>=2.7
@@ -30,6 +30,9 @@ streamlit>=1.31
 httpx>=0.27
 beautifulsoup4>=4.12
 lxml>=5.1
+
+# LLM (자동 셀렉터 추론용)
+anthropic>=0.40
 
 # ML
 scikit-learn>=1.4

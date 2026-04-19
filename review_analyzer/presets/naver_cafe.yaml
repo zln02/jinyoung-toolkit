@@ -1,0 +1,33 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+# 주의: 네이버 카페는 게시판이 iframe 안에 있는 경우가 많고,
+# 비공개 카페는 로그인 필요 → 공개 게시판만 동작.
+name: naver_cafe
+display_name: "네이버 카페 (공개)"
+description: "네이버 카페 공개 게시판 글 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 4
+  scroll_to_bottom: false
+
+pagination:
+  type: click
+  next_button_selector: "a.pgR"
+  max_pages: 20
+
+selectors:
+  container: "tr.board-list"
+  fields:
+    title: "a.article"
+    reviewer: "td.p-nick a"
+    date: "td.td_date"
+    views: "td.td_view"
+
+analysis:
+  text_column: title
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 15
+  delay_between_pages: 3.0

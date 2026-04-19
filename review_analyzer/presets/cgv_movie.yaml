@@ -1,0 +1,35 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+name: cgv_movie
+display_name: "CGV 영화 평점"
+description: "CGV 영화 한줄평·평점 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 3
+  scroll_to_bottom: false
+
+pagination:
+  type: click
+  next_button_selector: "button.btn-paging.next"
+  max_pages: 30
+
+selectors:
+  container: "div.box-comment"
+  fields:
+    reviewer: "span.user-id"
+    rating: "div.score-wrap span.percent span"
+    content: "p.tx-comment"
+    date: "span.day"
+    likes: "button.btn-like span.like"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  # CGV는 "96" 같은 100점 척도 — _parse_rating_value가 자동으로 5점 척도로 변환
+  rating_parse_pattern: "(\\d+)"
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 25
+  delay_between_pages: 2.0

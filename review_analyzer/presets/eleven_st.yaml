@@ -1,0 +1,35 @@
+# 셀렉터 갱신: 2026-04-07 (11번가 상품 페이지 DOM 기준)
+# container: div.c-review-box — 메인 상품 페이지 요약 리뷰 (약 18개 노출)
+# ⚠️ 더 많은 리뷰는 iframe(/products/{id}/review-frame)으로 분리됨. 이 프리셋은 요약 18개만 수집.
+name: eleven_st
+display_name: "11번가 상품 리뷰"
+description: "11번가 상품 페이지 요약 리뷰 수집 (약 18개). GCP 서버에서 정상 접근 확인."
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 4
+  scroll_to_bottom: true
+
+pagination:
+  # 요약 리뷰는 단일 페이지
+  type: none
+  max_pages: 1
+
+selectors:
+  container: "div.c-review-box"
+  fields:
+    reviewer: "span.c-review-box__id"
+    rating: "dd.c-starrate__sati"      # "만족도 : 100%" 형태
+    content: "p.c-review-box__quotation"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  # "만족도 : 100%" → 숫자만 추출 (100 / 80 등)
+  rating_parse_pattern: "(\\d+)"
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 25
+  delay_between_pages: 2.0

@@ -1,6 +1,8 @@
+# ⚠️ GCP/AWS/Azure 등 클라우드 IP는 네이버 쇼핑이 "일시적 접속 제한" 메시지로 차단함.
+# 로컬 PC(주거용 IP)에서 실행하면 정상 동작. 셀렉터는 2025-11 기준 구조라 로컬에서 재검증 필요.
 name: naver_shopping
 display_name: "네이버 쇼핑 리뷰"
-description: "네이버 쇼핑 상품 리뷰 수집 + AI 분석"
+description: "네이버 쇼핑 상품 리뷰 수집 + AI 분석. ⚠️ 클라우드 서버에서 봇 차단됨 (로컬 PC 전용)."
 
 driver:
   type: selenium
