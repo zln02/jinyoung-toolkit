@@ -125,12 +125,45 @@ def _load_sample_df() -> pd.DataFrame | None:
 # ---------------------------------------------------------------------------
 
 
+def _is_private_host(hostname: str) -> bool:
+    """내부망/루프백/링크로컬 호스트 여부. SSRF 방지."""
+    if not hostname:
+        return True
+    lower = hostname.lower()
+    if lower in ("localhost", "localhost.localdomain") or lower.endswith(
+        (".internal", ".local", ".localhost")
+    ):
+        return True
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
 def _validate_url(raw: str) -> str | None:
-    """URL 형식 검증 후 정규화된 URL 반환. 유효하지 않으면 None."""
+    """URL 형식 검증 + SSRF 방지(사설·루프백 IP 차단). 유효하지 않으면 None."""
+    from urllib.parse import urlparse
+
     stripped = (raw or "").strip()
     if not stripped:
         return None
     if not (stripped.startswith("http://") or stripped.startswith("https://")):
+        return None
+    try:
+        parsed = urlparse(stripped)
+    except ValueError:
+        return None
+    if _is_private_host(parsed.hostname or ""):
         return None
     return stripped
 
