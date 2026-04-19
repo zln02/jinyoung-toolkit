@@ -1,6 +1,9 @@
+# 셀렉터 갱신: 2026-04-07 (Google Play 앱 상세 페이지 DOM 기준)
+# container: div.EGFGHd — 리뷰 카드
+# 메인 페이지에서는 보통 3~5개만 노출되며, 더 많은 리뷰는 "See all reviews" 다이얼로그에 있음.
 name: google_play
 display_name: "구글 플레이 스토어 리뷰"
-description: "Google Play Store 앱 리뷰 수집 + AI 분석"
+description: "Google Play Store 앱 리뷰 수집 + AI 분석. 메인 페이지 노출 리뷰 3~5개 기준."
 
 driver:
   type: selenium
@@ -9,26 +12,26 @@ driver:
   scroll_to_bottom: true
 
 pagination:
-  # 구글 플레이는 "더 보기" 버튼 클릭 방식으로 추가 리뷰를 로드한다
-  type: click
-  next_button_selector: "button.RveJvd"
-  max_pages: 20
+  # Google Play 메인 페이지는 리뷰가 고정 3~5개만 노출됨.
+  # 전체 리뷰는 다이얼로그 모달로 열리는데, Selenium으로는 불안정해서 단일 페이지 수집만 지원.
+  type: none
+  max_pages: 1
 
 selectors:
-  container: "div.RHo1pe"
+  container: "div.EGFGHd"
   fields:
-    reviewer: "span.X43Kjb"
-    rating: "div.pf5lIe > div[aria-label]"
-    date: "span.p2TkOb"
-    content: "span.review-full-text, span[jsname='bN97Pc']"
-    thumbs_up_count: "div.jUL89d > span"
+    reviewer: "div.X5PpBb"
+    rating: "div.iXRFPc@aria-label"   # "Rated 4 stars out of five stars"
+    date: "span.bp9Aid"
+    content: "div.h3YV2d"
+    helpful: "div.AJTPZc"
     developer_reply: "div.ocpBU"
 
 analysis:
   text_column: content
   rating_column: rating
-  # rating 필드가 aria-label 속성값이므로 숫자 파싱 전처리 필요
-  rating_parse_pattern: "(\\d+(\\.\\d+)?)"
+  # aria-label 문자열 "Rated 4 stars out of five stars"에서 첫 숫자 추출
+  rating_parse_pattern: "(\\d+)"
   sentiment_method: rating_based
 
 rate_limit:
