@@ -1,0 +1,38 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+# 주의: Amazon은 봇 차단(캡차/IP 차단)이 강력하므로 실 동작 보장 어려움.
+# 약관상 자동 수집이 제한될 수 있음 — 사용자 책임 하에 사용.
+name: amazon_reviews
+display_name: "Amazon 상품 리뷰"
+description: "Amazon 상품 리뷰 수집 + AI 분석 (봇 차단 강함, 주의)"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 5
+  scroll_to_bottom: true
+
+pagination:
+  type: click
+  next_button_selector: "li.a-last a"
+  max_pages: 20
+
+selectors:
+  container: "div[data-hook='review']"
+  fields:
+    reviewer: "span.a-profile-name"
+    rating: "i[data-hook='review-star-rating'] span.a-icon-alt"
+    title: "a[data-hook='review-title'] span"
+    content: "span[data-hook='review-body'] span"
+    date: "span[data-hook='review-date']"
+    helpful: "span[data-hook='helpful-vote-statement']"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  # "4.0 out of 5 stars" 형태 → 첫 숫자만 추출
+  rating_parse_pattern: "([0-9.]+)"
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 10
+  delay_between_pages: 5.0

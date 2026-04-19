@@ -1,0 +1,36 @@
+# 셀렉터 갱신: 2026-04-07 (YouTube watch 페이지 DOM 기준)
+# ⚠️ 중요: YouTube는 단순 scroll로는 댓글이 로드되지 않음.
+# ytd-comments 요소로 scrollIntoView 한 뒤 추가 스크롤이 필요.
+# drivers.py의 scroll_into_view_selector 옵션이 이를 처리.
+name: youtube_comments
+display_name: "YouTube 댓글"
+description: "유튜브 영상 댓글 수집 + AI 분석 (무한 스크롤)"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 5
+  scroll_to_bottom: true
+  # 댓글 섹션으로 먼저 점프해야 lazy-load가 트리거됨
+  scroll_into_view_selector: "ytd-comments"
+
+pagination:
+  type: scroll
+  max_pages: 10  # 스크롤 반복 횟수 (1회당 ~15댓글 추가 로드)
+
+selectors:
+  container: "ytd-comment-thread-renderer"
+  fields:
+    reviewer: "#author-text"
+    content: "#content-text"
+    likes: "#vote-count-middle"
+    date: "#published-time-text"
+
+analysis:
+  text_column: content
+  # 평점 없음 — 키워드 기반 Level 2 감성분석 사용
+  sentiment_method: keyword_based
+
+rate_limit:
+  requests_per_minute: 15
+  delay_between_pages: 3.0

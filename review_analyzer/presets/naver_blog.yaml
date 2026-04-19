@@ -1,0 +1,36 @@
+# 네이버 블로그 검색 결과 (SDS 컴포넌트 기반, 2026-04 갱신)
+# 실 페이지 DOM 분석으로 검증된 셀렉터. 사이트 DOM 변경 시 갱신 필요.
+# 페이지네이션은 start=1,11,21... 형태의 url_param 방식.
+name: naver_blog
+display_name: "네이버 블로그 검색"
+description: "네이버 블로그 검색 결과를 모아 AI로 분석해요"
+
+search_url_template: "https://search.naver.com/search.naver?ssc=tab.blog.all&query={keyword}"
+
+driver:
+  type: httpx
+
+pagination:
+  type: url_param
+  # 사용자는 검색 키워드 base URL만 입력 (예: https://search.naver.com/search.naver?ssc=tab.blog.all&query=...)
+  # url_template은 base에 &start=1, &start=11 ... 을 붙임.
+  url_template: "{base}&start={page}"
+  start: 1
+  step: 10
+  max_pages: 10
+
+selectors:
+  container: "div._fe_view_power_content"
+  fields:
+    title: "span.sds-comps-text-type-headline1"
+    content: "span.sds-comps-text-type-body1"
+    reviewer: "span.sds-comps-profile-info-title-text"
+    date: "span.sds-comps-profile-info-subtext"
+
+analysis:
+  text_column: content
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 20
+  delay_between_pages: 2.0
