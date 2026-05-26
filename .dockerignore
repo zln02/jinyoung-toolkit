@@ -6,3 +6,7 @@ __pycache__/
 output/
 *.egg-info/
 .mypy_cache/
+# 시크릿: 빌드 컨텍스트→이미지 레이어 유입 방지 (ANTHROPIC_API_KEY 등)
+.env
+.env.*
+!.env.example

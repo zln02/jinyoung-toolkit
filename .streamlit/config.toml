@@ -1,7 +1,7 @@
 [server]
 headless = true
-port = 8501
-enableCORS = false
+# port는 여기 고정하지 않는다 — Cloud Run/$PORT가 CLI(--server.port)로 주입.
+# enableCORS=false는 XSRF 보호와 비호환 경고를 유발하므로 기본값(true) 유지.
 
 [theme]
 primaryColor = "#4A90D9"

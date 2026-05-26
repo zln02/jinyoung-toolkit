@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import platform
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +28,29 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from shared.logger import get_logger
 
 log = get_logger(__name__)
+
+
+@lru_cache(maxsize=None)
+def _get_shared_kiwi(custom_dict_path: str | None) -> Kiwi:
+    """Kiwi 인스턴스를 사용자 사전 경로별로 캐싱해 재사용한다.
+
+    Kiwi() 초기화는 모델 로드 비용이 크므로(수 초·수백 MB), 동일 사전 설정에
+    대해 단 한 번만 생성한다. 사용자 사전 로드는 인스턴스를 변형하므로
+    경로를 캐시 키로 분리한다. 토크나이즈는 상태를 변경하지 않아 공유가 안전하다.
+    """
+    kiwi = Kiwi()
+    if custom_dict_path is not None:
+        dict_path = Path(custom_dict_path)
+        if dict_path.is_file():
+            try:
+                kiwi.load_user_dictionary(str(dict_path))
+                log.info("사용자_사전_로드", path=str(dict_path))
+            except Exception as exc:
+                log.warning("사용자_사전_로드_실패", path=str(dict_path), error=str(exc))
+        else:
+            log.warning("사용자_사전_파일_없음", path=str(dict_path))
+    return kiwi
+
 
 # ---------------------------------------------------------------------------
 # 기본 한국어 불용어 셋
@@ -99,30 +123,12 @@ class KoreanTextProcessor:
             frozenset(stopwords) if stopwords is not None else DEFAULT_STOPWORDS
         )
 
-        # Kiwi 인스턴스 생성
-        self._kiwi: Kiwi = Kiwi()
-
-        # 사용자 사전 로드 (경로가 제공됐고 파일이 존재할 때만)
-        if custom_dict_path is not None:
-            dict_path = Path(custom_dict_path)
-            if dict_path.is_file():
-                try:
-                    self._kiwi.load_user_dictionary(str(dict_path))
-                    log.info(
-                        "사용자_사전_로드",
-                        path=str(dict_path),
-                    )
-                except Exception as exc:
-                    log.warning(
-                        "사용자_사전_로드_실패",
-                        path=str(dict_path),
-                        error=str(exc),
-                    )
-            else:
-                log.warning(
-                    "사용자_사전_파일_없음",
-                    path=str(dict_path),
-                )
+        # Kiwi 인스턴스는 모듈 레벨 캐시로 공유한다. Streamlit은 분석 버튼마다
+        # KoreanTextProcessor를 새로 생성하는데, Kiwi() 로딩은 수 초·수백 MB라
+        # 매번 재생성하면 지연/메모리 압박이 크다. 사용자 사전 경로별로 캐싱.
+        self._kiwi: Kiwi = _get_shared_kiwi(
+            str(custom_dict_path) if custom_dict_path is not None else None
+        )
 
         log.info("KoreanTextProcessor_초기화_완료", stopwords_count=len(self.stopwords))
 
