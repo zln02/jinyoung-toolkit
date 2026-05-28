@@ -133,10 +133,18 @@ def _render_cluster(cr: ClusterResult) -> None:
     render_metrics(
         {
             "군집 수": str(cr.n_clusters),
-            "Silhouette": sil_txt,
+            "군집 품질 점수": sil_txt,
             "자동 선택": "예" if cr.auto_selected else "아니오",
         }
     )
+    # 비전공자용 해석 — silhouette 점수 기준
+    if cr.silhouette is not None:
+        if cr.silhouette >= 0.5:
+            st.caption("✨ **군집이 명확하게 나뉘었어요** (점수 0.5 이상)")
+        elif cr.silhouette >= 0.2:
+            st.caption("🙂 **보통 수준의 분리** — 군집이 일부 겹쳐있을 수 있어요")
+        else:
+            st.caption("⚠️ **군집 경계가 흐릿** — 데이터가 비슷하거나 더 많이 모아야 할 수 있어요")
 
     size_df = pd.DataFrame(
         [{"군집": f"클러스터 {k}", "리뷰 수": v} for k, v in cr.sizes.items()]

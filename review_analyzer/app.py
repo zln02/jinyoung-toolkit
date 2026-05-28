@@ -60,6 +60,28 @@ def main() -> None:
     )
 
     with tab_analyze:
+        # 랜딩의 "🎁 리뷰 분석 샘플로 시작" 클릭 시 자동 로드 + 분석까지 한 번에
+        if st.session_state.pop("_auto_sample", None) == "review":
+            with st.spinner("샘플 데이터를 자동 분석 중... (약 10초)"):
+                try:
+                    from review_analyzer.analyzer import ReviewAnalyzer
+                    from review_analyzer.ui._helpers import load_sample_df
+
+                    _sdf = load_sample_df()
+                    if _sdf is not None and not _sdf.empty:
+                        _analyzer = ReviewAnalyzer(
+                            text_column="content", rating_column="rating"
+                        )
+                        _result = _analyzer.run(_sdf)
+                        st.session_state[_SESSION_DF] = _sdf
+                        st.session_state[_SESSION_RAW_DF] = _sdf
+                        st.session_state[_SESSION_RESULT] = _result
+                        st.session_state[_SESSION_CFG] = ("content", "rating", None)
+                        vstats.record_activity("샘플 데모(리뷰)")
+                        st.success("🎉 샘플 자동 분석 완료! 아래에서 결과를 확인하세요.")
+                except Exception as exc:
+                    log.error("샘플 자동 분석 실패", error=str(exc))
+
         # Step indicator
         if st.session_state.get(_SESSION_RESULT) is not None:
             current_step = 3

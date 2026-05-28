@@ -80,13 +80,31 @@ def _render_landing() -> None:
 
     st.write("")  # 여백
 
-    # 결과물 미리보기 placeholder
-    with st.expander("예시 리포트 미리보기", expanded=False):
-        st.info(
-            "샘플 데이터로 먼저 분석해 보면 PDF·워드클라우드·차트가 어떻게 나오는지 "
-            "확인할 수 있어요. 좌측 사이드바에서 도구를 선택해 '샘플로 먼저 보기' 를 "
-            "눌러보세요."
-        )
+    # 1-click 샘플 체험 — 비전공자 1분 도달 경로
+    st.markdown("### 🎁 처음이신가요? 샘플로 1분 체험")
+    st.caption(
+        "실제 한국어 리뷰/CSV 샘플로 자동 분석까지 한 번에 보여드려요. "
+        "회원가입·API 키 없이 바로."
+    )
+    demo_c1, demo_c2 = st.columns(2)
+    with demo_c1:
+        if st.button(
+            "🛍️ 리뷰 분석 샘플로 시작",
+            key="landing_demo_ra",
+            use_container_width=True,
+        ):
+            st.session_state["_auto_sample"] = "review"
+            st.session_state["_selected_tool"] = "리뷰 분석기"
+            st.rerun()
+    with demo_c2:
+        if st.button(
+            "🤖 AutoML 샘플로 시작",
+            key="landing_demo_aml",
+            use_container_width=True,
+        ):
+            st.session_state["_auto_sample"] = "automl"
+            st.session_state["_selected_tool"] = "AutoML 리포트"
+            st.rerun()
 
 
 def _render_visitor_panel() -> None:
