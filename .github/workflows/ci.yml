@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, refactor/streamlit-split]
+    branches: [master, main]
   pull_request:
 
 jobs:
@@ -15,6 +15,11 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+      - name: Install Korean fonts (NanumGothic 등 — PDF/워드클라우드 테스트용)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-nanum fonts-nanum-extra
+          fc-cache -fv > /dev/null 2>&1
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
