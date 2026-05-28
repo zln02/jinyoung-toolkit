@@ -23,22 +23,32 @@ from fpdf import FPDF
 
 from shared.korean_nlp import KoreanTextProcessor
 from shared.logger import get_logger
+from shared.report_base import (
+    COLOR_CAPTION,
+    COLOR_HEADER_BG,
+    COLOR_HEADER_FG,
+    COLOR_HEADING,
+    COLOR_INSIGHT_BG,
+    COLOR_TEXT,
+    LINE_HEIGHT,
+    PAGE_MARGIN,
+    PAGE_WIDTH_USABLE,
+)
 
 log = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# 색상 상수
+# 모듈 내부 별칭 (하위 호환 — 기존 코드가 _COLOR_* 로 참조하는 부분 유지)
 # ---------------------------------------------------------------------------
-_COLOR_HEADER_BG = (0x4A, 0x90, 0xD9)   # #4A90D9 — 테이블 헤더 배경
-_COLOR_HEADER_FG = (255, 255, 255)       # 흰색 — 테이블 헤더 텍스트
-_COLOR_INSIGHT_BG = (0xF0, 0xF2, 0xF6)  # #F0F2F6 — 인사이트 박스 배경
-_COLOR_TEXT = (33, 33, 33)              # 기본 본문 텍스트
-_COLOR_CAPTION = (100, 100, 100)        # 캡션 텍스트 (회색)
-_COLOR_HEADING = (30, 30, 30)           # 섹션 제목
-
-_PAGE_MARGIN = 15.0        # mm
-_PAGE_WIDTH_USABLE = 180.0  # A4(210mm) - 좌우 여백(15mm*2)
-_LINE_HEIGHT = 7.0          # 기본 행 높이 mm
+_COLOR_HEADER_BG = COLOR_HEADER_BG
+_COLOR_HEADER_FG = COLOR_HEADER_FG
+_COLOR_INSIGHT_BG = COLOR_INSIGHT_BG
+_COLOR_TEXT = COLOR_TEXT
+_COLOR_CAPTION = COLOR_CAPTION
+_COLOR_HEADING = COLOR_HEADING
+_PAGE_MARGIN = PAGE_MARGIN
+_PAGE_WIDTH_USABLE = PAGE_WIDTH_USABLE
+_LINE_HEIGHT = LINE_HEIGHT
 
 
 class ReportGenerator:

@@ -89,6 +89,12 @@ class AppSettings(BaseSettings):
         description="자동 셀렉터 추론에 사용할 Claude 모델",
     )
 
+    # --- 공공데이터포털 (data.go.kr) ---
+    public_data_api_key: Optional[str] = Field(
+        default=None,
+        description="공공데이터포털 서비스키(data.go.kr 발급). 공공 API 프리셋의 serviceKey로 사용",
+    )
+
     # --- 감성 분석 ---
     sentiment_model: str = Field(
         default="gpt-4o-mini",

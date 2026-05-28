@@ -152,7 +152,7 @@ class TestProductComparator:
         self, comparator: ProductComparator, sample_df: pd.DataFrame, tmp_path: Path
     ) -> None:
         """ComparisonReportGenerator 로 PDF 파일 생성."""
-        from shared.comparison_report_generator import ComparisonReportGenerator
+        from review_analyzer.comparison_report_generator import ComparisonReportGenerator
 
         analyzed = [
             _make_analyzed("우리", sample_df),

@@ -7,7 +7,7 @@ import pandas as pd
 import typer
 
 from shared.logger import get_logger
-from review_analyzer.analyzer import ReviewAnalyzer
+from review_analyzer.analyzer import ReviewAnalyzer, SentimentConfig
 from review_analyzer.comparator import ProductComparator, ProductInput
 from review_analyzer.crawler.engine import CrawlConfig, CrawlerEngine, DriverType
 from review_analyzer.preset_loader import PresetLoader
@@ -158,6 +158,10 @@ def analyze(
     output: Path = typer.Option(Path("./output"), help="출력 디렉토리"),
     text_column: str = typer.Option("content", help="텍스트 컬럼명"),
     rating_column: str = typer.Option("rating", help="평점 컬럼명 (없으면 'none')"),
+    sentiment_mode: str = typer.Option(
+        "auto",
+        help="감성 분석 방식: auto(평점 우선·실패 시 키워드) | rating | keyword",
+    ),
     report: bool = typer.Option(True, help="PDF 리포트 생성"),
     package: bool = typer.Option(True, help="납품 패키지 생성"),
 ) -> None:
@@ -194,9 +198,12 @@ def analyze(
     analyzer = ReviewAnalyzer(
         text_column=text_column,
         rating_column=effective_rating,
+        sentiment_config=SentimentConfig(mode=sentiment_mode.lower()),
     )
 
-    typer.echo(f"[분석 시작] rows={len(df)}, text_col={text_column}")
+    typer.echo(
+        f"[분석 시작] rows={len(df)}, text_col={text_column}, mode={sentiment_mode.lower()}"
+    )
     logger.info("분석 시작: rows=%d, text_col=%s", len(df), text_column)
 
     try:
@@ -404,7 +411,7 @@ def compare(
 
     pdf_path = output / "comparison_report.pdf"
     try:
-        from shared.comparison_report_generator import ComparisonReportGenerator  # type: ignore[import]
+        from review_analyzer.comparison_report_generator import ComparisonReportGenerator  # type: ignore[import]
 
         try:
             ComparisonReportGenerator().render(report, pdf_path)

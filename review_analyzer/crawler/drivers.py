@@ -627,8 +627,10 @@ class APIDriver(BaseDriver):
 
     Args:
         base_url: API 베이스 URL
-        api_key: API 키 (선택)
+        api_key: API 키 (선택, Authorization Bearer 헤더로 전달)
         headers: 추가 HTTP 헤더 (선택)
+        query_params: 모든 요청에 붙일 쿼리 파라미터 (선택).
+            공공데이터포털처럼 serviceKey=를 쿼리스트링으로 받는 API용.
     """
 
     def __init__(
@@ -636,6 +638,7 @@ class APIDriver(BaseDriver):
         base_url: str = "",
         api_key: str | None = None,
         headers: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self._base_headers: dict[str, str] = {
@@ -646,6 +649,7 @@ class APIDriver(BaseDriver):
             self._base_headers["Authorization"] = f"Bearer {api_key}"
         if headers:
             self._base_headers.update(headers)
+        self._query_params = query_params or None
         self._client: httpx.AsyncClient | None = None
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -687,7 +691,7 @@ class APIDriver(BaseDriver):
         start = time.perf_counter()
 
         try:
-            response = await client.get(full_url)
+            response = await client.get(full_url, params=self._query_params)
             elapsed = time.perf_counter() - start
             response.raise_for_status()
 

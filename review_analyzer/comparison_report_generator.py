@@ -1,12 +1,12 @@
 """
-shared/comparison_report_generator.py — 경쟁사 비교 리포트 PDF 생성기.
+review_analyzer/comparison_report_generator.py — 경쟁사 비교 리포트 PDF 생성기.
 
 ComparisonReport(comparator.py)를 받아 ReportGenerator(report_generator.py)로
 PDF를 렌더링한다. NaN/0건/빈 인사이트에 대한 방어 레이어가 포함되어 있다.
 
 사용법:
     from pathlib import Path
-    from shared.comparison_report_generator import ComparisonReportGenerator
+    from review_analyzer.comparison_report_generator import ComparisonReportGenerator
 
     gen = ComparisonReportGenerator()
     gen.render(report, Path("output/cmp_report.pdf"))
@@ -14,55 +14,24 @@ PDF를 렌더링한다. NaN/0건/빈 인사이트에 대한 방어 레이어가 
 
 from __future__ import annotations
 
-import math
 import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
 from review_analyzer.comparator import ComparisonReport
 from shared.korean_nlp import KoreanTextProcessor
 from shared.logger import get_logger
+from shared.report_base import format_pct, format_rating, is_nan
 from shared.report_generator import ReportGenerator
 
 log = get_logger(__name__)
 
-
-def _is_nan(val: Any) -> bool:
-    """NaN/None 판정 헬퍼."""
-    if val is None:
-        return True
-    if isinstance(val, float):
-        return math.isnan(val)
-    return False
-
-
-def _format_rating(val: Any) -> str:
-    """평점 값을 PDF 표시용 문자열로 변환. NaN/0 → '데이터 부족'."""
-    if _is_nan(val):
-        return "데이터 부족"
-    try:
-        f = float(val)
-    except (TypeError, ValueError):
-        return "데이터 부족"
-    if math.isnan(f) or f == 0.0:
-        return "데이터 부족"
-    return f"{f:.2f}"
-
-
-def _format_pct(val: Any) -> str:
-    """% 값을 PDF 표시용 문자열로 변환. NaN → '-'."""
-    if _is_nan(val):
-        return "-"
-    try:
-        f = float(val)
-    except (TypeError, ValueError):
-        return "-"
-    if math.isnan(f):
-        return "-"
-    return f"{f}%"
+# 모듈 내부 별칭 (기존 코드 가독성 유지)
+_is_nan = is_nan
+_format_rating = format_rating
+_format_pct = format_pct
 
 
 class ComparisonReportGenerator:

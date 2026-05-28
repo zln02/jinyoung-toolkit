@@ -12,7 +12,7 @@ from review_analyzer.comparator import (
     ComparisonReport,
     ProductAnalyzed,
 )
-from shared.comparison_report_generator import (
+from review_analyzer.comparison_report_generator import (
     ComparisonReportGenerator,
     _format_pct,
     _format_rating,

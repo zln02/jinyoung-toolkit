@@ -72,6 +72,31 @@ NEGATIVE_KEYWORDS: set[str] = {
     "고장",
 }
 
+# 부정어 — 긍정 키워드 바로 앞에 오면 의미를 반전("안 좋다", "별로 안 깔끔")
+NEGATION_WORDS: tuple[str, ...] = ("안", "못", "별로", "전혀", "않", "없")
+
+
+@dataclass
+class SentimentConfig:
+    """감성 분석 사용자 설정.
+
+    UI(고급 설정) → ReviewAnalyzer → 리포트/패키지 빌드까지 동일하게 전달된다.
+
+    Attributes:
+        mode: "auto"(평점 우선·실패 시 키워드) | "rating"(평점만) | "keyword"(키워드만).
+        rating_scale: 평점 만점(5/10/100). None이면 값 크기로 자동 추정.
+        positive_threshold: 5점 환산 후 이 값 이상이면 positive.
+        negative_threshold: 5점 환산 후 이 값 이하면 negative.
+        extra_positive/extra_negative: 사용자 추가 긍/부정 키워드(균형안 미사용, 예약).
+    """
+
+    mode: str = "auto"
+    rating_scale: float | None = None
+    positive_threshold: float = 4.0
+    negative_threshold: float = 2.0
+    extra_positive: tuple[str, ...] = ()
+    extra_negative: tuple[str, ...] = ()
+
 
 @dataclass
 class AnalysisResult:
@@ -110,6 +135,7 @@ class ReviewAnalyzer:
         rating_column: str | None = "rating",
         rating_parse_pattern: str | None = None,
         cache_root: Path | None = None,
+        sentiment_config: SentimentConfig | None = None,
     ) -> None:
         """초기화. KoreanTextProcessor 인스턴스 생성.
 
@@ -120,11 +146,16 @@ class ReviewAnalyzer:
             cache_root: 워드클라우드 PNG를 보존할 루트 디렉토리.
                 None이면 ``get_settings().output_dir / "wordcloud_cache"`` 사용.
                 Streamlit rerun/다운로드 후에도 PNG가 살아있도록 영구 디렉토리에 저장한다.
+            sentiment_config: 감성 분석 사용자 설정(분석 방식·평점 척도·긍부정 경계).
+                None이면 기본값(auto 모드)을 사용한다.
         """
         self.text_column = text_column
         self.rating_column = rating_column
         self.rating_parse_pattern = rating_parse_pattern
         self._rating_regex = re.compile(rating_parse_pattern) if rating_parse_pattern else None
+        self.config = sentiment_config or SentimentConfig()
+        self._positive_keywords = POSITIVE_KEYWORDS | set(self.config.extra_positive)
+        self._negative_keywords = NEGATIVE_KEYWORDS | set(self.config.extra_negative)
         self.nlp = KoreanTextProcessor()
         self.cache_root: Path = (
             cache_root
@@ -157,27 +188,42 @@ class ReviewAnalyzer:
         return df
 
     def analyze_sentiment(self, df: pd.DataFrame) -> pd.DataFrame:
-        """3단계 감성 분석.
+        """감성 분석 (SentimentConfig 기반).
 
-        Level 1 (정확도 ~85%): 평점 기반 — 4-5=positive, 3=neutral, 1-2=negative
-        Level 2 (정확도 ~70%): 키워드 기반 — 긍/부정 키워드 사전으로 분류
-        Level 3 (정확도 ~95%): LLM API (미구현 → Level 1 또는 2로 fallback)
+        - mode="auto" (기본): 행마다 평점 파싱을 시도해 성공하면 평점 기반,
+          실패하면 키워드 기반으로 fallback. 평점이 "만족도:100%"처럼 비표준이라
+          파싱 못 해도 전부 neutral로 떨어지지 않는다(과거 버그 수정).
+        - mode="rating": 평점 기반만 (파싱 실패 행은 neutral).
+        - mode="keyword": 키워드 기반만.
+        - rating_column이 없으면 mode와 무관하게 키워드 기반.
 
-        rating_column이 있으면 Level 1 사용, 없으면 Level 2 사용.
+        평점 분류 경계와 척도는 self.config(positive/negative_threshold, rating_scale)를 따른다.
         결과: 'sentiment' 컬럼 추가 ("positive"/"negative"/"neutral")
         """
         df = df.copy()
+        mode = self.config.mode
+        has_rating = bool(self.rating_column and self.rating_column in df.columns)
 
-        if self.rating_column and self.rating_column in df.columns:
-            logger.info("감성 분석 Level 1 (평점 기반)")
-            df["sentiment"] = df[self.rating_column].apply(self._sentiment_by_rating)
-        else:
-            logger.info("감성 분석 Level 2 (키워드 기반)")
+        if not has_rating or mode == "keyword":
+            logger.info("감성 분석: 키워드 기반 (mode=%s, 평점컬럼=%s)", mode, has_rating)
             df["sentiment"] = df[self.text_column].apply(self._sentiment_by_keywords)
+        elif mode == "rating":
+            logger.info("감성 분석: 평점 기반 (mode=rating)")
+            df["sentiment"] = df[self.rating_column].apply(self._sentiment_by_rating)
+        else:  # auto — 평점 우선, 파싱 실패 행은 키워드 fallback
+            logger.info("감성 분석: 자동 하이브리드 (평점 우선, 실패 시 키워드 fallback)")
+            df["sentiment"] = df.apply(self._sentiment_row, axis=1)
 
         counts = df["sentiment"].value_counts().to_dict()
         logger.info("감성 분포: %s", counts)
         return df
+
+    def _sentiment_row(self, row: "pd.Series") -> str:
+        """auto 모드 행 단위 분류: 평점 파싱 성공 시 평점 기반, 실패 시 키워드 fallback."""
+        r = self._parse_rating_value(row.get(self.rating_column))
+        if r is None:
+            return self._sentiment_by_keywords(row.get(self.text_column))
+        return self._classify_rating(r)
 
     def _parse_rating_value(self, raw: Any) -> float | None:
         """원시 평점 값(숫자 or 문자열)을 float으로 변환.
@@ -217,9 +263,18 @@ class ReviewAnalyzer:
                     val = float(text)
                 except (TypeError, ValueError):
                     return None
-        # 100점 척도 → 5점 척도
-        if val > 5.5:
+        # 척도 → 5점 척도 환산
+        scale = self.config.rating_scale
+        if scale == 10:
+            val = val / 2.0
+        elif scale == 100:
             val = val / 20.0
+        elif scale == 5:
+            pass  # 이미 5점 척도
+        else:
+            # 자동 추정: 5.5 초과면 100점 척도로 간주("만족도 : 100%", "96%" 등)
+            if val > 5.5:
+                val = val / 20.0
         # 0~5 클램핑
         if val < 0:
             return None
@@ -227,24 +282,41 @@ class ReviewAnalyzer:
             val = 5.0
         return val
 
-    def _sentiment_by_rating(self, rating: Any) -> str:
-        """평점으로 감성 분류 (5점 척도 기준)."""
-        r = self._parse_rating_value(rating)
-        if r is None:
-            return "neutral"
-        if r >= 4:
+    def _classify_rating(self, r: float) -> str:
+        """5점 환산 평점을 설정 경계(positive/negative_threshold)로 분류."""
+        if r >= self.config.positive_threshold:
             return "positive"
-        if r <= 2:
+        if r <= self.config.negative_threshold:
             return "negative"
         return "neutral"
 
-    @staticmethod
-    def _sentiment_by_keywords(text: Any) -> str:
-        """키워드 카운트로 감성 분류."""
+    def _sentiment_by_rating(self, rating: Any) -> str:
+        """평점으로 감성 분류 (5점 환산 + 설정 경계). 파싱 실패 시 neutral."""
+        r = self._parse_rating_value(rating)
+        if r is None:
+            return "neutral"
+        return self._classify_rating(r)
+
+    def _sentiment_by_keywords(self, text: Any) -> str:
+        """키워드 카운트로 감성 분류 (부정어 반전 포함).
+
+        긍정 키워드가 매칭돼도 바로 앞(최대 6글자)에 부정어(안/못/별로/전혀/않/없)가
+        있으면 부정으로 센다 — "안 좋다", "별로 안 깔끔" 같은 표현의 오분류를 막는다.
+        """
         if not isinstance(text, str):
             return "neutral"
-        pos_count = sum(1 for kw in POSITIVE_KEYWORDS if kw in text)
-        neg_count = sum(1 for kw in NEGATIVE_KEYWORDS if kw in text)
+        pos_count = 0
+        neg_count = 0
+        for kw in self._positive_keywords:
+            idx = text.find(kw)
+            if idx == -1:
+                continue
+            window = text[max(0, idx - 6):idx]
+            if any(neg in window for neg in NEGATION_WORDS):
+                neg_count += 1
+            else:
+                pos_count += 1
+        neg_count += sum(1 for kw in self._negative_keywords if kw in text)
         if pos_count > neg_count:
             return "positive"
         if neg_count > pos_count:

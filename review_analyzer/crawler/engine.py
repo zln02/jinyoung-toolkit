@@ -269,10 +269,21 @@ class CrawlerEngine:
                 ),
             )
         elif driver_type == DriverType.API:
+            from shared.config import get_settings
+
+            # 평문 프리셋 키 의존을 줄이려 config(.env)의 공공데이터 키로 폴백
+            query_params = dict(driver_opts.get("query_params") or {})
+            api_key = driver_opts.get("api_key") or get_settings().public_data_api_key
+            # auth_param 지정 시 쿼리 파라미터 인증(공공데이터포털 serviceKey 등),
+            # 미지정 시 기존 Authorization Bearer 헤더 방식.
+            auth_param = driver_opts.get("auth_param")
+            if auth_param and api_key:
+                query_params[auth_param] = api_key
             return APIDriver(
                 base_url=driver_opts.get("base_url", ""),
-                api_key=driver_opts.get("api_key"),
+                api_key=(None if auth_param else api_key),
                 headers=driver_opts.get("headers"),
+                query_params=query_params or None,
             )
         else:
             raise ValueError(f"알 수 없는 DriverType: {driver_type}")

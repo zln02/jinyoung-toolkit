@@ -469,6 +469,13 @@ class AutoMLRunner:
         # 수치형 컬럼만 사용
         X = X.select_dtypes(include=[np.number]).fillna(0)
 
+        # 수치형 피처가 하나도 없으면(범주형/텍스트만) 조용히 실패하지 않고 명확히 안내
+        if X.shape[1] == 0:
+            raise RuntimeError(
+                "수치형 피처가 없습니다. 타깃을 제외한 컬럼이 모두 텍스트/범주형입니다. "
+                "텍스트 데이터라면 '텍스트 피처 포함' 옵션을 켜고 텍스트 컬럼을 선택하세요."
+            )
+
         is_classification = task_type in (
             TaskType.BINARY_CLASSIFICATION,
             TaskType.MULTICLASS_CLASSIFICATION,
@@ -644,9 +651,9 @@ class AutoMLRunner:
         cfg = self.config
         log.info("AutoML_파이프라인_시작", input_path=str(cfg.input_path))
 
-        # 1. CSV 로드
+        # 1. CSV 로드 (utf-8-sig — app이 BOM 포함으로 저장하므로 컬럼명 오염 방지)
         try:
-            df = pd.read_csv(cfg.input_path)
+            df = pd.read_csv(cfg.input_path, encoding="utf-8-sig")
         except Exception as exc:
             log.error("CSV_로드_실패", path=str(cfg.input_path), error=str(exc))
             raise

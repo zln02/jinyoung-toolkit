@@ -345,3 +345,32 @@ pytest -v --cov
 ## 라이선스
 
 MIT
+
+---
+
+## 2026-05-28 업데이트 (요약)
+
+> 이번 사이클에 추가·개선된 기능. 자세한 검증은 `CRAWLING_AUDIT_REPORT.md` · `SITE_VERIFICATION.md` 참고.
+
+### 리뷰 분석기 (`review_analyzer`)
+- **감성 분석 개선**: `SentimentConfig` 도입 — `auto`(평점 우선, 실패 시 키워드 fallback) / `rating` / `keyword` 3모드 + 부정어 반전 처리. 평점이 `"만족도 : 100%"`처럼 비표준이라 모두 중립으로 떨어지던 버그 수정. UI에 "고급 설정"(분석 방식·평점 척도·긍부정 경계 슬라이더) 추가.
+- **🔬 고급 분석 탭 신설** (`review_analyzer/advanced_analyzer.py` + `ui/advanced_tab.py`):
+  - TF-IDF 기반 **KMeans 군집화** (silhouette로 k 자동 선택, 클러스터별 대표 키워드·대표 리뷰)
+  - **LDA 토픽 모델링** (sklearn)
+  - **PCA / t-SNE 2D 시각화** (plotly 산점도)
+  - **통계 요약** (silhouette·길이 분포·평점×감성 교차표)
+- **다중 키워드 검색 크롤**: 검색형 프리셋(예: `naver_blog`)에서 키워드를 줄바꿈/쉼표로 여러 개 입력 → 각각 크롤 후 `_keyword` 컬럼으로 합쳐 반환.
+- **공공데이터 API 인프라**: `APIDriver`에 `query_params` + 쿼리 인증(`auth_param`) 지원, `config.public_data_api_key`(.env) 폴백, `presets/public_data_example.yaml` 템플릿 추가 → data.go.kr 같은 공공 API를 같은 프리셋 패턴으로 수집.
+
+### AutoML 리포트 (`automl_reporter`)
+- **업로드 오류 수정**: 한글 엑셀 CSV(cp949/euc-kr) 인코딩 폴백(`utf-8-sig→cp949→euc-kr→utf-8`), `runner`의 BOM 처리(`encoding="utf-8-sig"`)로 컬럼명 오염 KeyError 해결.
+- **'📝 텍스트 피처 포함' UI 옵션 추가**: 수치 컬럼이 부족한 텍스트 위주 데이터(리뷰 등)에서 텍스트 컬럼을 TF-IDF로 변환해 모델 입력에 사용. 비수치 데이터 명시적 가드 + 친절한 에러 메시지.
+- 샘플 시연: `samples/automl_text_demo.csv`(한글 리뷰 40행) — 텍스트 옵션 ON 시 LogisticRegression / accuracy ≈ 87.5%.
+
+### 메인 허브 (`app.py`)
+- **익명 이용 현황 집계** (`shared/visitor_stats.py`): IP·식별자 미저장. 세션 기반 SQLite 카운터로 누적/오늘 접속·분석 실행 횟수 + 최근 활동 시각을 사이드바와 홈 상단에 표시.
+
+### 검증 문서
+- `CRAWLING_AUDIT_REPORT.md` — 도메인 기준 감사 (24점 만점 중 8점, 갭 분석)
+- `SITE_VERIFICATION.md` — 프리셋 15종 동작 가능성 실측 (selenium 미설치로 12종 현 환경 동작불가, `apple_app_store`·공공API가 현실적 데모 경로)
+
