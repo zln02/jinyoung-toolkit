@@ -216,17 +216,26 @@ def render_results(result: AnalysisResult) -> None:
     }
     render_metrics(metrics)
 
+    # 비전공자용 자동 해석 — 긍정 비율 기준 한 줄 평
+    if pos_ratio >= 80:
+        st.caption("👍 **전반적으로 우호적** — 80% 이상이 긍정 의견이에요.")
+    elif pos_ratio >= 50:
+        st.caption("🙂 **보통 수준의 만족도** — 긍정·부정이 섞여 있어요. 부정 키워드 점검 권장.")
+    else:
+        st.caption("⚠️ **부정 의견이 많음** — 어떤 점이 불편한지 부정 키워드를 우선 살펴보세요.")
+
     # 감성 분포 파이차트
     st.subheader("감성 분포")
+    _label_map = {"positive": "긍정", "negative": "부정", "neutral": "중립"}
     sentiment_df = pd.DataFrame(
         [
-            {"감성": k, "건수": v}
+            {"감성": _label_map.get(k, k), "건수": v}
             for k, v in result.sentiment_distribution.items()
             if v > 0
         ]
     )
     if not sentiment_df.empty:
-        color_map = {"positive": "#4CAF50", "negative": "#F44336", "neutral": "#9E9E9E"}
+        color_map = {"긍정": "#4CAF50", "부정": "#F44336", "중립": "#9E9E9E"}
         fig = px.pie(
             sentiment_df,
             names="감성",

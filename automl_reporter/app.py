@@ -164,10 +164,14 @@ def _render_step2_settings(
         default_index = target_options.index(suggested)
 
     selected_target: str = st.selectbox(
-        "타겟 컬럼",
+        "예측하려는 결과 컬럼 (예: 만족도·구매여부)",
         options=target_options,
         index=default_index,
-        help="예측 대상 컬럼을 선택하세요. 타겟이 없으면 군집화로 실행됩니다.",
+        help=(
+            "이 컬럼의 값을 모델이 학습해서 새 데이터에 대해 예측해요. "
+            "처음이면 자동 추천을 그대로 두셔도 됩니다. "
+            "선택할 것이 없으면 '(없음 — 군집화)'를 골라 비슷한 데이터끼리 묶기를 할 수 있어요."
+        ),
     )
 
     target_column: str | None = (
@@ -176,10 +180,15 @@ def _render_step2_settings(
 
     task_radio_options = ["자동 감지", "분류", "회귀", "군집화"]
     selected_task_label: str = st.radio(
-        "문제 유형",
+        "어떤 식으로 답을 낼까요?",
         options=task_radio_options,
         horizontal=True,
-        help="자동 감지는 타겟 컬럼의 분포를 분석하여 유형을 결정합니다.",
+        help=(
+            "자동 감지(권장): 결과 컬럼 값을 보고 알아서 결정 / "
+            "분류: 카테고리 예측(예: 긍정/부정) / "
+            "회귀: 숫자 예측(예: 가격) / "
+            "군집화: 비슷한 데이터끼리 묶기(정답 없이)"
+        ),
     )
 
     task_type: TaskType | None = _TASK_TYPE_LABEL_MAP.get(selected_task_label)
@@ -324,10 +333,30 @@ def _render_results(result: AutoMLResult) -> None:
     }
     render_metrics(metrics)
 
+    # 비전공자용 자동 해석 — 주요 지표 임계값 기반
+    if result.best_metrics:
+        _first_key, _first_val = next(iter(result.best_metrics.items()))
+        if _first_key.lower() in ("accuracy", "f1", "precision", "recall"):
+            if _first_val >= 0.9:
+                st.caption("🌟 **매우 우수** — 새 데이터에서도 잘 맞출 가능성이 높아요.")
+            elif _first_val >= 0.8:
+                st.caption("👍 **좋은 성능** — 실무에서 쓸만한 수준이에요.")
+            elif _first_val >= 0.7:
+                st.caption("🙂 **보통 수준** — 데이터를 더 모으거나 컬럼을 보강해보세요.")
+            else:
+                st.caption("⚠️ **개선 필요** — 컬럼 선택·데이터 양·문제 유형 설정을 점검하세요.")
+        elif _first_key.lower() in ("r2",):
+            if _first_val >= 0.8:
+                st.caption("🌟 **설명력 강함** — 결과를 잘 예측해요.")
+            elif _first_val >= 0.5:
+                st.caption("🙂 **설명력 보통**")
+            else:
+                st.caption("⚠️ **설명력 약함** — 입력 컬럼을 보강하거나 다른 문제 유형을 고려하세요.")
+
     # ── 모델 비교 테이블 ─────────────────────────────────────────────────
     st.subheader("모델 비교")
 
-    with st.expander("📊 메트릭 설명"):
+    with st.expander("📊 지표 설명 (처음 보시면 펼쳐보세요)", expanded=True):
         st.markdown(
             "- **ACCURACY**: 전체 예측 중 맞춘 비율\n"
             "- **F1**: 정밀도와 재현율의 조화 평균\n"
@@ -540,6 +569,23 @@ def main() -> None:
         title="AutoML 리포트",
         subtitle="CSV만 올리면 AI가 모델을 만들어 줍니다.",
     )
+
+    # 랜딩의 "🤖 AutoML 샘플로 시작" 클릭 시 자동 로드 + 분석까지 한 번에
+    if st.session_state.pop("_auto_sample", None) == "automl":
+        with st.spinner("샘플 데이터를 자동 분석 중... (약 15초)"):
+            try:
+                _sdf = _load_sample_tabular_df()
+                if _sdf is not None and not _sdf.empty:
+                    _target = FeatureInspector(_sdf).suggest_target()
+                    _result = _run_automl(_sdf, _target, None, None)
+                    st.session_state[_SESSION_DF] = _sdf
+                    st.session_state[_SESSION_RESULT] = _result
+                    vstats.record_activity("샘플 데모(AutoML)")
+                    st.success(
+                        f"🎉 샘플 자동 분석 완료! 최적 모델: {_result.best_model_name}"
+                    )
+            except Exception as exc:
+                log.error("샘플 자동 분석 실패", error=str(exc))
 
     # Step indicator
     if st.session_state.get(_SESSION_RESULT) is not None:
