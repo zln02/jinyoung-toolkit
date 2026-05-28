@@ -1,6 +1,14 @@
 # jinyoung-toolkit
 
+[![CI](https://github.com/zln02/jinyoung-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/zln02/jinyoung-toolkit/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zln02/jinyoung-toolkit/graph/badge.svg)](https://codecov.io/gh/zln02/jinyoung-toolkit)
+![Python](https://img.shields.io/badge/python-3.11-blue.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker)](./Dockerfile)
+
 데이터 분석 자동화 도구 모음. 리뷰 감성분석과 AutoML 리포트 생성을 웹 UI 및 CLI로 제공한다.
+
+🌐 **라이브 데모**: http://34.64.217.243:8501
 
 ---
 

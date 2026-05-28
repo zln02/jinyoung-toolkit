@@ -4,9 +4,31 @@ version = "2.0.0"
 description = "한국어 리뷰 분석 + AutoML 리포트 생성기"
 requires-python = ">=3.11"
 
-[tool.black]
-line-length = 88
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "output", ".claude", ".github", "samples"]
+
+[tool.ruff.lint]
+# 안정 룰: 문법 오류·미사용 import·정렬 (점진적 확장)
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "review_analyzer/tests", "automl_reporter/tests"]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["review_analyzer", "automl_reporter", "shared"]
+omit = ["*/tests/*", "*/__pycache__/*", ".venv/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

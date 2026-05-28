@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, refactor/streamlit-split]
+  pull_request:
+
+jobs:
+  test:
+    name: pytest + coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run pytest with coverage
+        run: pytest --cov --cov-report=xml --cov-report=term -q
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  security:
+    name: pip-audit (의존성 취약점 스캔)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit requirements
+        run: pip-audit -r requirements.txt --disable-pip
+        continue-on-error: true
