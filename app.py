@@ -7,6 +7,7 @@ import streamlit as st
 from shared.config import get_settings
 from shared.logger import get_logger
 from shared.ui_components import render_metrics
+import shared.visitor_stats as vstats
 
 log = get_logger(__name__)
 
@@ -23,6 +24,18 @@ def _render_landing() -> None:
     st.title("인사이트랩")
     st.caption("InsightLab — 데이터 분석을 더 쉽게, 더 빠르게.")
     st.divider()
+
+    # 실시간 이용 현황 (익명 집계 — IP 미저장)
+    _stats = vstats.get_stats()
+    render_metrics(
+        {
+            "누적 접속": f"{_stats['total_visits']:,}",
+            "오늘 접속": f"{_stats['today_visits']:,}",
+            "누적 분석 실행": f"{_stats['total_activities']:,}",
+        },
+        num_cols=3,
+    )
+    st.write("")
 
     # 3-메트릭 (시각적 신뢰도)
     render_metrics(
@@ -76,11 +89,33 @@ def _render_landing() -> None:
         )
 
 
+def _render_visitor_panel() -> None:
+    """사이드바 — 익명 이용 현황(접속·활동 집계, IP 미저장)."""
+    stats = vstats.get_stats()
+    st.sidebar.divider()
+    st.sidebar.markdown("**📊 이용 현황**")
+    c1, c2 = st.sidebar.columns(2)
+    c1.metric("누적 접속", f"{stats['total_visits']:,}")
+    c2.metric("오늘 접속", f"{stats['today_visits']:,}")
+    c1.metric("누적 분석", f"{stats['total_activities']:,}")
+    c2.metric("오늘 분석", f"{stats['today_activities']:,}")
+    recent = vstats.get_recent_activities(3)
+    if recent:
+        st.sidebar.caption("최근 활동")
+        for action, hhmm in recent:
+            st.sidebar.caption(f"· {action}" + (f" · {hhmm}" if hhmm else ""))
+
+
 def main() -> None:
     """Streamlit 메인 허브."""
     st.set_page_config(
         page_title="인사이트랩 InsightLab", page_icon="🧰", layout="wide"
     )
+
+    # 익명 접속 집계 — 세션당 1회 (IP 미저장)
+    if not st.session_state.get("_visit_recorded"):
+        vstats.record_visit()
+        st.session_state["_visit_recorded"] = True
 
     selected = st.sidebar.selectbox(
         "도구 선택",
@@ -90,6 +125,8 @@ def main() -> None:
         ),
     )
     st.session_state["_selected_tool"] = selected
+
+    _render_visitor_panel()
 
     # 외부 프로젝트 링크
     settings = get_settings()

@@ -6,6 +6,7 @@ CrawlConfig, LegalComplianceChecker, CrawlResult, CrawlerEngine 구현.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 import urllib.robotparser
@@ -14,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -217,8 +219,21 @@ class CrawlerEngine:
         self._pause_event = asyncio.Event()
         self._pause_event.set()
 
+        pagination = self._preset.get("pagination", {}) or {}
+        self._pagination_type: str = pagination.get("type", "none")
+        self._next_button_selector: str = pagination.get("next_button_selector", "")
+        preset_max_pages = pagination.get("max_pages", config.max_pages)
+        # 프리셋과 사용자 입력 중 작은 값 사용
+        self._pagination_max_pages: int = min(preset_max_pages, config.max_pages)
+        # url_param 페이지네이션용 (네이버 블로그 start=1,11,21... 등)
+        self._pagination_url_template: str = pagination.get("url_template", "")
+        self._pagination_start: int = pagination.get("start", 1)
+        self._pagination_step: int = pagination.get("step", 1)
+
     def _create_driver(self) -> BaseDriver:
         """config.driver_type에 따라 적절한 드라이버 인스턴스를 생성한다.
+
+        프리셋의 `driver` 섹션 옵션을 모두 반영한다 (headless, wait_seconds, base_url 등).
 
         Returns:
             BaseDriver 구현체 인스턴스
@@ -229,25 +244,109 @@ class CrawlerEngine:
         driver_type = self._config.driver_type
         timeout = self._config.timeout_seconds
         max_retries = self._config.max_retries
+        driver_opts: dict[str, Any] = self._preset.get("driver", {}) or {}
 
         if driver_type == DriverType.HTTPX:
-            return HttpxDriver(timeout=timeout, max_retries=max_retries)
+            return HttpxDriver(
+                timeout=timeout,
+                max_retries=max_retries,
+                user_agent=driver_opts.get("user_agent", "JinyoungToolkit/1.0"),
+                headers=driver_opts.get("headers"),
+            )
         elif driver_type == DriverType.SELENIUM:
-            return SeleniumDriver(headless=True)
+            scroll_iters = 0
+            if self._pagination_type == "scroll":
+                scroll_iters = self._pagination_max_pages
+            return SeleniumDriver(
+                headless=driver_opts.get("headless", True),
+                wait_seconds=driver_opts.get("wait_seconds", 3),
+                scroll_to_bottom=driver_opts.get("scroll_to_bottom", False),
+                scroll_iterations=scroll_iters,
+                user_agent=driver_opts.get("user_agent"),
+                stealth=driver_opts.get("stealth", True),
+                scroll_into_view_selector=driver_opts.get(
+                    "scroll_into_view_selector"
+                ),
+            )
         elif driver_type == DriverType.API:
-            return APIDriver()
+            from shared.config import get_settings
+
+            # 평문 프리셋 키 의존을 줄이려 config(.env)의 공공데이터 키로 폴백
+            query_params = dict(driver_opts.get("query_params") or {})
+            api_key = driver_opts.get("api_key") or get_settings().public_data_api_key
+            # auth_param 지정 시 쿼리 파라미터 인증(공공데이터포털 serviceKey 등),
+            # 미지정 시 기존 Authorization Bearer 헤더 방식.
+            auth_param = driver_opts.get("auth_param")
+            if auth_param and api_key:
+                query_params[auth_param] = api_key
+            return APIDriver(
+                base_url=driver_opts.get("base_url", ""),
+                api_key=(None if auth_param else api_key),
+                headers=driver_opts.get("headers"),
+                query_params=query_params or None,
+            )
         else:
             raise ValueError(f"알 수 없는 DriverType: {driver_type}")
 
-    def _parse_page(self, html: str, selectors: dict[str, Any]) -> list[dict[str, Any]]:
-        """HTML에서 selectors 기반으로 데이터를 추출한다.
+    def _expand_urls(self, urls: list[str]) -> list[str]:
+        """url_param 페이지네이션이면 첫 URL을 url_template으로 N개로 확장한다.
 
-        selectors 구조:
-            - "container": 반복 항목의 CSS 셀렉터 (예: ".review-item")
-            - "fields": {필드명: CSS 셀렉터} 딕셔너리
+        url_template은 `{page}` 토큰을 포함해야 하며, 절대 URL이면 그대로,
+        상대형이면 입력 URL의 base와 합쳐 사용한다. `{base}` 토큰이 있으면
+        입력 URL을 그대로 치환한다.
 
         Args:
-            html: 파싱할 HTML 문자열
+            urls: 입력 URL 리스트
+
+        Returns:
+            확장된 URL 리스트. url_param이 아니면 입력 그대로 반환.
+        """
+        if self._pagination_type != "url_param":
+            return urls
+        if not urls:
+            return urls
+        template = self._pagination_url_template
+        if not template:
+            logger.warning("url_param 페이지네이션이지만 url_template이 비어 있음")
+            return urls
+
+        base_url = urls[0]
+        n = self._pagination_max_pages
+        start = self._pagination_start
+        step = self._pagination_step
+
+        expanded: list[str] = []
+        for i in range(n):
+            page_value = start + step * i
+            replaced = template.replace("{page}", str(page_value))
+            replaced = replaced.replace("{base}", base_url)
+
+            if replaced.startswith("http://") or replaced.startswith("https://"):
+                final_url = replaced
+            else:
+                # 상대 경로 → base_url 기준으로 결합
+                final_url = urljoin(base_url, replaced)
+            expanded.append(final_url)
+
+        logger.debug(
+            "url_param 확장: base=%s template=%s n=%d → %d개",
+            base_url,
+            template,
+            n,
+            len(expanded),
+        )
+        return expanded
+
+    def _parse_page(self, html: str, selectors: dict[str, Any]) -> list[dict[str, Any]]:
+        """HTML 또는 JSON에서 selectors 기반으로 데이터를 추출한다.
+
+        selectors 구조:
+            - "format": "json"인 경우 JSON 모드 (점 표기법). 없으면 BS4 HTML 모드.
+            - "container": 반복 항목의 CSS 셀렉터 또는 점 표기법 경로
+            - "fields": {필드명: CSS 셀렉터 또는 점 표기법} 딕셔너리
+
+        Args:
+            html: 파싱할 HTML/JSON 문자열
             selectors: container와 fields를 담은 딕셔너리
 
         Returns:
@@ -256,6 +355,9 @@ class CrawlerEngine:
         records: list[dict[str, Any]] = []
         if not html:
             return records
+
+        if selectors.get("format") == "json":
+            return self._parse_json(html, selectors)
 
         try:
             soup = BeautifulSoup(html, "html.parser")
@@ -277,8 +379,18 @@ class CrawlerEngine:
                 record: dict[str, Any] = {}
                 for field_name, css_selector in fields.items():
                     try:
-                        element = container.select_one(css_selector)
-                        record[field_name] = element.get_text(strip=True) if element else ""
+                        # "selector@attr" 형식이면 해당 속성값 추출 (예: div.rating@aria-label)
+                        attr_name: str | None = None
+                        sel = css_selector
+                        if "@" in css_selector:
+                            sel, attr_name = css_selector.rsplit("@", 1)
+                        element = container.select_one(sel)
+                        if element is None:
+                            record[field_name] = ""
+                        elif attr_name:
+                            record[field_name] = element.get(attr_name, "") or ""
+                        else:
+                            record[field_name] = element.get_text(strip=True)
                     except Exception as exc:
                         logger.warning(
                             "필드 추출 실패: field=%s selector=%s error=%s",
@@ -293,6 +405,195 @@ class CrawlerEngine:
             logger.error("HTML 파싱 중 예외: %s", exc)
 
         return records
+
+    @staticmethod
+    def _dot_get(obj: Any, path: str) -> Any:
+        """점(.) 구분 키 경로로 dict에서 값을 추출한다.
+
+        예: obj={"a": {"b": "c"}}, path="a.b" → "c"
+        중간에 dict가 아니거나 키가 없으면 "" 반환.
+
+        Args:
+            obj: 탐색 대상 객체
+            path: 점 구분 키 경로
+
+        Returns:
+            추출된 값 또는 ""
+        """
+        if not path:
+            return ""
+        cur: Any = obj
+        for key in path.split("."):
+            if isinstance(cur, dict):
+                if key not in cur:
+                    return ""
+                cur = cur[key]
+            else:
+                return ""
+        return cur
+
+    def _parse_json(self, body: str, selectors: dict[str, Any]) -> list[dict[str, Any]]:
+        """JSON 본문에서 selectors 기반으로 데이터를 추출한다.
+
+        - container: 점 표기법 경로 (예: "feed.entry") → list 또는 dict
+        - fields: {필드명: 점 표기법} 매핑 (예: "im:rating.label")
+
+        Args:
+            body: JSON 문자열
+            selectors: container/fields 포함 dict
+
+        Returns:
+            추출된 레코드 리스트
+        """
+        records: list[dict[str, Any]] = []
+        try:
+            root: Any = json.loads(body)
+        except (json.JSONDecodeError, ValueError) as exc:
+            logger.error("JSON 파싱 실패: %s", exc)
+            return records
+
+        container_path: str = selectors.get("container", "")
+        fields: dict[str, str] = selectors.get("fields", {})
+
+        if not container_path:
+            logger.warning("JSON 모드: selectors에 'container' 키가 없어 파싱 불가")
+            return records
+
+        items: Any = self._dot_get(root, container_path)
+        if isinstance(items, dict):
+            items = [items]
+        if not isinstance(items, list):
+            logger.warning("JSON container 결과가 list/dict 아님: type=%s", type(items).__name__)
+            return records
+
+        for item in items:
+            record: dict[str, Any] = {}
+            for field_name, field_path in fields.items():
+                try:
+                    value = self._dot_get(item, field_path)
+                    record[field_name] = value if value is not None else ""
+                except Exception as exc:
+                    logger.warning(
+                        "JSON 필드 추출 실패: field=%s path=%s error=%s",
+                        field_name,
+                        field_path,
+                        exc,
+                    )
+                    record[field_name] = ""
+            records.append(record)
+
+        logger.debug("JSON 파싱: container=%s 개수=%d", container_path, len(records))
+        return records
+
+    async def _paginate_with_click(
+        self,
+        driver: SeleniumDriver,
+        selectors: dict[str, Any],
+        all_records: list[dict[str, Any]],
+        errors: list[dict[str, Any]],
+        initial_url: str,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """클릭 기반 페이지네이션을 수행한다.
+
+        2페이지부터 max_pages까지 다음 버튼을 클릭하며 파싱한다.
+        중단 조건: click_next=False, 빈 HTML, 파싱 결과 0건, 예외.
+
+        Args:
+            driver: SeleniumDriver 인스턴스
+            selectors: 파싱용 셀렉터 dict
+            all_records: 누적 레코드 리스트 (in-place 확장)
+            errors: 누적 에러 리스트 (in-place 확장)
+            initial_url: 1페이지 URL (로깅/progress용)
+
+        Yields:
+            진행 상태 dict (run_with_progress용). 호출자가 무시하면 단순 루프로 동작.
+        """
+        max_pages = self._pagination_max_pages
+        for page in range(2, max_pages + 1):
+            await self._pause_event.wait()
+            await self._rate_limiter.wait()
+
+            try:
+                clicked = await driver.click_next(
+                    self._next_button_selector,
+                    wait_seconds=None,
+                )
+            except Exception as exc:
+                logger.error(
+                    "페이지네이션 클릭 예외: url=%s page=%d error=%s",
+                    initial_url,
+                    page,
+                    exc,
+                )
+                errors.append(
+                    {"url": f"{initial_url}#page={page}", "error": str(exc)}
+                )
+                break
+
+            if not clicked:
+                logger.info(
+                    "페이지네이션 종료(마지막 페이지): url=%s page=%d",
+                    initial_url,
+                    page,
+                )
+                break
+
+            try:
+                html = await driver.get_page_source()
+            except Exception as exc:
+                logger.error(
+                    "페이지네이션 page_source 예외: url=%s page=%d error=%s",
+                    initial_url,
+                    page,
+                    exc,
+                )
+                errors.append(
+                    {"url": f"{initial_url}#page={page}", "error": str(exc)}
+                )
+                break
+
+            if not html:
+                logger.warning(
+                    "페이지네이션 종료(빈 HTML): url=%s page=%d",
+                    initial_url,
+                    page,
+                )
+                break
+
+            try:
+                records = self._parse_page(html, selectors)
+            except Exception as exc:
+                logger.error(
+                    "페이지네이션 파싱 예외: url=%s page=%d error=%s",
+                    initial_url,
+                    page,
+                    exc,
+                )
+                errors.append(
+                    {"url": f"{initial_url}#page={page}", "error": str(exc)}
+                )
+                break
+
+            if not records:
+                logger.info(
+                    "페이지네이션 종료(파싱 결과 0건): url=%s page=%d",
+                    initial_url,
+                    page,
+                )
+                break
+
+            all_records.extend(records)
+            logger.debug(
+                "페이지네이션 파싱 완료: url=%s page=%d records=%d",
+                initial_url,
+                page,
+                len(records),
+            )
+            yield {
+                "page": page,
+                "current_url": f"{initial_url}#page={page}",
+                "collected": len(all_records),
+            }
 
     async def run(self) -> CrawlResult:
         """전체 크롤링을 실행한다.
@@ -313,8 +614,15 @@ class CrawlerEngine:
         selectors: dict[str, Any] = self._preset.get("selectors", {})
         pii_columns: list[str] = self._preset.get("pii_columns", [])
 
-        urls = self._config.target_urls[: self._config.max_pages]
+        urls = self._expand_urls(self._config.target_urls)
+        urls = urls[: self._config.max_pages]
         driver = self._create_driver()
+
+        use_pagination = (
+            self._pagination_type == "click"
+            and bool(self._next_button_selector)
+            and isinstance(driver, SeleniumDriver)
+        )
 
         try:
             for url in urls:
@@ -355,6 +663,17 @@ class CrawlerEngine:
                 except Exception as exc:
                     logger.error("파싱 예외: url=%s error=%s", url, exc)
                     errors.append({"url": url, "error": str(exc)})
+                    continue
+
+                if use_pagination and records:
+                    async for _progress in self._paginate_with_click(
+                        driver,  # type: ignore[arg-type]
+                        selectors,
+                        all_records,
+                        errors,
+                        initial_url=url,
+                    ):
+                        pass
 
         finally:
             try:
@@ -371,6 +690,18 @@ class CrawlerEngine:
                 logger.error("PII 마스킹 중 예외: %s", exc)
 
         elapsed = time.perf_counter() - start_time
+
+        if len(all_records) == 0:
+            logger.error(
+                "크롤링 0건: preset=%s urls=%d errors=%d — 셀렉터 또는 사이트 차단 의심",
+                self._config.preset_name,
+                len(urls),
+                len(errors),
+            )
+            # errors 리스트가 비어있으면 "0 records extracted" 사유 명시
+            if not errors:
+                errors.append({"url": urls[0] if urls else "", "error": "파싱 결과 0건 — 셀렉터 확인 필요"})
+
         logger.info(
             "크롤링 완료: collected=%d failed=%d elapsed=%.2fs",
             len(all_records),
@@ -403,9 +734,16 @@ class CrawlerEngine:
         selectors: dict[str, Any] = self._preset.get("selectors", {})
         pii_columns: list[str] = self._preset.get("pii_columns", [])
 
-        urls = self._config.target_urls[: self._config.max_pages]
+        urls = self._expand_urls(self._config.target_urls)
+        urls = urls[: self._config.max_pages]
         total = len(urls)
         driver = self._create_driver()
+
+        use_pagination = (
+            self._pagination_type == "click"
+            and bool(self._next_button_selector)
+            and isinstance(driver, SeleniumDriver)
+        )
 
         try:
             for idx, url in enumerate(urls):
@@ -465,6 +803,22 @@ class CrawlerEngine:
                 except Exception as exc:
                     logger.error("파싱 예외: url=%s error=%s", url, exc)
                     errors.append({"url": url, "error": str(exc)})
+                    continue
+
+                if use_pagination and records:
+                    async for page_progress in self._paginate_with_click(
+                        driver,  # type: ignore[arg-type]
+                        selectors,
+                        all_records,
+                        errors,
+                        initial_url=url,
+                    ):
+                        yield {
+                            "progress": (idx + 1) / total if total else 1.0,
+                            "collected": len(all_records),
+                            "current_url": page_progress.get("current_url", url),
+                            "status": "running",
+                        }
 
         finally:
             try:

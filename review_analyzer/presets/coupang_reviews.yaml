@@ -1,6 +1,9 @@
+# ⚠️ 쿠팡은 Akamai Bot Manager로 클라우드 IP를 전면 차단 ("Access Denied").
+# GCP/AWS/Azure 서버에서는 동작 불가. 로컬 PC(주거용 IP) + stealth 옵션으로만 접근 가능.
+# 셀렉터는 2025-11 기준이라 실사용 시 로컬에서 재검증 필요.
 name: coupang_reviews
 display_name: "쿠팡 상품 리뷰"
-description: "쿠팡 상품 상세 페이지 고객 리뷰 수집 + AI 분석"
+description: "쿠팡 상품 리뷰 수집 + AI 분석. ⚠️ 클라우드 서버에서 Access Denied (로컬 PC 전용, 봇 차단 가능성)."
 
 driver:
   type: selenium
@@ -27,6 +30,9 @@ selectors:
 analysis:
   text_column: content
   rating_column: rating
+  # 쿠팡은 별점 아이콘 width/style attribute 기반이라 숫자 직접 추출이 불안정.
+  # 클라우드 IP 차단 때문에 실제 사용 거의 불가 → 패턴만 추가해두고 로컬 PC 사용 시 재확인 필요.
+  rating_parse_pattern: "([0-9.]+)"
   sentiment_method: rating_based
 
 rate_limit:

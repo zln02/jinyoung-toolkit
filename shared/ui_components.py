@@ -1,5 +1,6 @@
 """Streamlit 공통 UI 컴포넌트 모듈."""
 
+import io
 from typing import Any
 
 import pandas as pd
@@ -62,6 +63,14 @@ _ERROR_MAP: dict[str, str] = {
         "AI가 페이지를 자동으로 분석하지 못했어요. "
         "주소가 맞는지 확인하거나, '자주 쓰는 사이트에서 고르기'로 시도해 보세요."
     ),
+    "RuntimeError": (
+        "분석할 수 있는 피처가 부족합니다. 숫자 컬럼이 있는지 확인하거나, "
+        "텍스트 위주 데이터면 '텍스트 피처 포함' 옵션을 켜고 텍스트 컬럼을 선택해 주세요."
+    ),
+    "UnicodeDecodeError": (
+        "파일 인코딩을 읽지 못했습니다. CSV를 UTF-8 또는 CP949(엑셀 기본)로 저장해 다시 올려주세요."
+    ),
+    "EmptyDataError": "빈 파일이에요. 데이터가 들어있는 CSV를 올려주세요.",
 }
 
 
@@ -106,16 +115,39 @@ def render_file_uploader(
         if uploaded_file.name.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(uploaded_file)
         else:
-            df = pd.read_csv(uploaded_file, encoding="utf-8-sig")
+            df = _read_csv_resilient(uploaded_file)
+        if df.empty:
+            st.warning("업로드한 파일에 데이터가 없어요. 내용이 있는 CSV/Excel을 올려주세요.")
+            return None
         logger.info(
             "파일 업로드 성공: %s (%d행)", uploaded_file.name, len(df)
         )
+        st.success(f"✅ '{uploaded_file.name}' 업로드 완료 — {len(df):,}행 × {len(df.columns)}열")
         st.dataframe(df.head())
         return df
     except Exception as exc:
         logger.error("파일 파싱 실패: %s — %s", uploaded_file.name, exc)
-        st.error(f"파일을 읽는 중 오류가 발생했습니다: {exc}")
+        render_error(exc, context="파일 업로드")
         return None
+
+
+def _read_csv_resilient(uploaded_file: Any) -> pd.DataFrame:
+    """한글 CSV 인코딩을 순차 시도해 읽는다.
+
+    한국 사용자가 엑셀에서 저장한 CSV는 cp949(euc-kr)인 경우가 많아
+    utf-8 단독 시도는 UnicodeDecodeError로 실패한다. 흔한 인코딩을 순서대로 시도한다.
+    """
+    raw = uploaded_file.getvalue()
+    last_exc: Exception | None = None
+    for enc in ("utf-8-sig", "cp949", "euc-kr", "utf-8"):
+        try:
+            return pd.read_csv(io.BytesIO(raw), encoding=enc)
+        except (UnicodeDecodeError, pd.errors.ParserError) as exc:
+            last_exc = exc
+            continue
+    raise ValueError(
+        f"CSV 인코딩을 인식하지 못했습니다(utf-8·cp949 등 시도). 원인: {last_exc}"
+    )
 
 
 def render_download_button(

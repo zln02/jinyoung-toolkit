@@ -1,0 +1,34 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+name: yes24_book
+display_name: "Yes24 도서 리뷰"
+description: "Yes24 도서 회원 리뷰 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 3
+  scroll_to_bottom: true
+
+pagination:
+  type: click
+  next_button_selector: "a.bgYUI.next"
+  max_pages: 30
+
+selectors:
+  container: "div.reviewInfoGrp"
+  fields:
+    reviewer: "span.txt_id"
+    rating: "span.review_rating em"
+    title: "p.review_tit"
+    content: "div.review_cont"
+    date: "span.txt_date"
+    helpful: "span.cnt_help"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 25
+  delay_between_pages: 2.0

@@ -1,0 +1,35 @@
+# 셀렉터는 2026-04 시점 추정값. 사이트 DOM 변경 시 갱신 필요.
+# 주의: 야놀자는 모바일 페이지로 리다이렉트되는 경우가 많음.
+# User-Agent 등 driver 옵션 조정이 필요할 수 있음.
+name: yanolja_hotel
+display_name: "야놀자 호텔 리뷰"
+description: "야놀자 숙소 리뷰 수집 + AI 분석"
+
+driver:
+  type: selenium
+  headless: true
+  wait_seconds: 4
+  scroll_to_bottom: true
+
+pagination:
+  type: click
+  next_button_selector: "button.css-next-page"
+  max_pages: 25
+
+selectors:
+  container: "div[data-type='review']"
+  fields:
+    reviewer: "p.reviewer-nickname"
+    rating: "div.review-score span"
+    content: "p.review-comment"
+    date: "span.review-date"
+    room_type: "span.room-name"
+
+analysis:
+  text_column: content
+  rating_column: rating
+  sentiment_method: rating_based
+
+rate_limit:
+  requests_per_minute: 20
+  delay_between_pages: 3.0

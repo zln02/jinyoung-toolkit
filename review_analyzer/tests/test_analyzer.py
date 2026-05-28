@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,7 @@ import pandas as pd
 import pytest
 
 from review_analyzer.analyzer import AnalysisResult, ReviewAnalyzer
+from review_analyzer.app import _build_zip
 
 _FIXTURE_PATH = Path(__file__).parent.parent.parent / "tests" / "fixtures" / "sample_reviews_50.csv"
 
@@ -177,3 +179,121 @@ class TestReviewAnalyzer:
         assert set(df_result["sentiment"]).issubset({"positive", "negative", "neutral"})
         # rating 컬럼이 없어도 오류 없이 동작해야 함
         assert "rating" not in df_result.columns
+
+
+class TestRatingParsing:
+    """평점 파싱 (regex 기반) 테스트."""
+
+    def test_parse_rating_text_100pct(self) -> None:
+        """11번가 '만족도 : 100%' → 5.0 (100점 → 5점 자동 변환)."""
+        analyzer = ReviewAnalyzer(rating_parse_pattern=r"(\d+)")
+        assert analyzer._parse_rating_value("만족도 : 100%") == 5.0
+        assert analyzer._parse_rating_value("만족도 : 80%") == 4.0
+        assert analyzer._parse_rating_value("만족도 : 40%") == 2.0
+
+    def test_parse_rating_text_amazon(self) -> None:
+        """Amazon '4.0 out of 5 stars' → 4.0."""
+        analyzer = ReviewAnalyzer(rating_parse_pattern=r"([0-9.]+)")
+        assert analyzer._parse_rating_value("4.0 out of 5 stars") == 4.0
+        assert analyzer._parse_rating_value("3.5 out of 5 stars") == 3.5
+
+    def test_parse_rating_missing_pattern(self) -> None:
+        """패턴 없을 때 기존 동작 유지 — 숫자 그대로, 텍스트는 None."""
+        analyzer = ReviewAnalyzer(rating_parse_pattern=None)
+        assert analyzer._parse_rating_value(4) == 4.0
+        assert analyzer._parse_rating_value(3.5) == 3.5
+        assert analyzer._parse_rating_value("4") == 4.0
+        assert analyzer._parse_rating_value("abc") is None
+        assert analyzer._parse_rating_value(None) is None
+
+    def test_sentiment_with_text_rating(self) -> None:
+        """텍스트 평점으로 positive/negative/neutral 분류."""
+        analyzer = ReviewAnalyzer(rating_parse_pattern=r"(\d+)")
+        # 100% → 5.0 (positive)
+        assert analyzer._sentiment_by_rating("만족도 : 100%") == "positive"
+        # 40% → 2.0 (negative)
+        assert analyzer._sentiment_by_rating("만족도 : 40%") == "negative"
+        # 60% → 3.0 (neutral)
+        assert analyzer._sentiment_by_rating("만족도 : 60%") == "neutral"
+        # None → neutral
+        assert analyzer._sentiment_by_rating(None) == "neutral"
+
+
+class TestBuildZip:
+    """_build_zip 단위 테스트."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        return pd.read_csv(_FIXTURE_PATH)
+
+    @pytest.fixture
+    def analysis_result(self, sample_df: pd.DataFrame) -> AnalysisResult:
+        analyzer = ReviewAnalyzer(text_column="content", rating_column="rating")
+        return analyzer.run(sample_df)
+
+    def test_build_zip_returns_valid_zip(
+        self, sample_df: pd.DataFrame, analysis_result: AnalysisResult
+    ) -> None:
+        """정상 경로에서 유효한 ZIP 반환 확인."""
+        zip_bytes, is_fallback = _build_zip(sample_df, analysis_result, "test_pkg")
+
+        assert isinstance(zip_bytes, bytes)
+        assert len(zip_bytes) > 0
+        assert not is_fallback
+
+        import io
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            assert zf.testzip() is None  # 손상 없음
+
+    def test_build_zip_fallback_on_package_failure(
+        self, sample_df: pd.DataFrame, analysis_result: AnalysisResult
+    ) -> None:
+        """save_delivery_package 실패 시 폴백 ZIP에 raw.csv 포함 확인."""
+        with patch.object(
+            ReviewAnalyzer,
+            "save_delivery_package",
+            side_effect=RuntimeError("패키지 생성 실패"),
+        ):
+            zip_bytes, is_fallback = _build_zip(
+                sample_df, analysis_result, "test_fallback"
+            )
+
+        assert is_fallback is True
+        assert len(zip_bytes) > 0
+
+        import io
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            assert "raw.csv" in zf.namelist()
+
+    def test_build_zip_korean_csv_encoding(
+        self, analysis_result: AnalysisResult
+    ) -> None:
+        """한글 데이터 포함 시 UTF-8 BOM 인코딩 확인."""
+        korean_df = pd.DataFrame(
+            {"content": ["좋아요", "별로예요", "그냥 그래요"], "rating": [5, 1, 3]}
+        )
+
+        with patch.object(
+            ReviewAnalyzer,
+            "save_delivery_package",
+            side_effect=RuntimeError("강제 폴백"),
+        ):
+            zip_bytes, is_fallback = _build_zip(
+                korean_df, analysis_result, "korean_test"
+            )
+
+        assert is_fallback is True
+
+        import io
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            csv_bytes = zf.read("raw.csv")
+
+        # UTF-8 BOM 확인
+        assert csv_bytes.startswith(b"\xef\xbb\xbf")
+        # 한글 정상 디코딩 확인
+        decoded = csv_bytes.decode("utf-8-sig")
+        assert "좋아요" in decoded
+        assert "별로예요" in decoded

@@ -37,3 +37,17 @@ htmlcov/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Logs
+*.log
+logs/
+
+# Claude Code 내부 플랜 (커밋 불필요)
+.claude/
+
+# 샘플 PDF / 바이너리 (대용량, 데모용)
+samples/**/*.pdf
+samples/archive/
+
+# Docker secrets
+.docker-secrets/

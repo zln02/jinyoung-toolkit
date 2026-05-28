@@ -1,0 +1,44 @@
+# 공공데이터포털(data.go.kr) API 연동 예시 템플릿.
+#
+# 사용법:
+#  ① data.go.kr 에서 원하는 API 활용신청 → 서비스키(인증키) 발급
+#  ② .env 에 PUBLIC_DATA_API_KEY=발급받은_서비스키   (config.public_data_api_key 로 로드)
+#  ③ 아래 base_url · container · fields 를 대상 API 명세에 맞게 교체
+#  ④ 크롤링 탭에서 이 프리셋을 고르고 엔드포인트 경로/페이지를 입력
+#
+# serviceKey 는 auth_param 설정으로 자동 주입되므로 여기에 평문으로 넣지 말 것(시크릿 커밋 금지).
+name: public_data_example
+display_name: "공공데이터포털 API (예시 템플릿)"
+description: "data.go.kr REST API 연동용 템플릿 — 엔드포인트/필드를 교체해 사용하세요."
+
+driver:
+  type: api
+  base_url: "https://apis.data.go.kr"
+  auth_param: serviceKey        # config 공공데이터 키가 이 쿼리 파라미터로 자동 주입됨
+  query_params:
+    _type: json                 # XML 기본 API를 JSON 응답으로 받기
+    numOfRows: "100"
+
+pagination:
+  type: url_param
+  url_template: "{base}&pageNo={page}"
+  start: 1
+  step: 1
+  max_pages: 5
+
+selectors:
+  format: json
+  container: "response.body.items.item"   # 공공데이터포털 표준 응답 경로
+  fields:
+    # ↓ 대상 API 명세의 실제 필드명으로 교체하세요
+    title: "title"
+    date: "createDt"
+    content: "content"
+
+analysis:
+  text_column: content
+  sentiment_method: keyword_based
+
+rate_limit:
+  requests_per_minute: 30
+  delay_between_pages: 1.0

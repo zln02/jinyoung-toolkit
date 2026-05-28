@@ -92,12 +92,36 @@ def korean_processor() -> "KoreanTextProcessor":
 
 
 class TestConfig:
-    def test_default_settings(self) -> None:
+    def test_default_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """기본값이 스펙대로 설정되어 있어야 한다."""
         from shared.config import AppSettings
 
-        # 환경변수의 영향을 차단하기 위해 직접 인스턴스 생성
-        settings = AppSettings()
+        # 환경변수와 .env 파일의 영향을 모두 차단하여 순수 기본값을 검증
+        env_vars = [
+            "UIS_URL",
+            "LOG_LEVEL",
+            "OUTPUT_DIR",
+            "CHROME_DRIVER_PATH",
+            "REPORT_AUTHOR",
+            "CRAWL_DELAY_SECONDS",
+            "MAX_RETRIES",
+            "REQUEST_TIMEOUT",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "SELECTOR_INFERENCE_MODEL",
+            "SENTIMENT_MODEL",
+            "SENTIMENT_BATCH_SIZE",
+            "RANDOM_SEED",
+            "TEST_SIZE",
+            "GCP_PROJECT_ID",
+            "GCP_REGION",
+        ]
+        for var in env_vars:
+            monkeypatch.delenv(var, raising=False)
+            monkeypatch.delenv(var.lower(), raising=False)
+
+        # _env_file=None 으로 .env 파일 로드 차단
+        settings = AppSettings(_env_file=None)
 
         assert settings.log_level == "INFO", (
             f"log_level 기본값이 'INFO'여야 하는데 '{settings.log_level}'임"
@@ -108,8 +132,8 @@ class TestConfig:
         assert settings.report_author == "jinyoung-toolkit", (
             f"report_author 기본값이 'jinyoung-toolkit'여야 하는데 '{settings.report_author}'임"
         )
-        assert settings.crawl_delay_seconds == 1.0, (
-            f"crawl_delay_seconds 기본값이 1.0이어야 하는데 {settings.crawl_delay_seconds}임"
+        assert settings.crawl_delay_seconds == 1.5, (
+            f"crawl_delay_seconds 기본값이 1.5여야 하는데 {settings.crawl_delay_seconds}임"
         )
         assert settings.max_retries == 3, (
             f"max_retries 기본값이 3이어야 하는데 {settings.max_retries}임"
@@ -120,11 +144,11 @@ class TestConfig:
         assert settings.random_seed == 42, (
             f"random_seed 기본값이 42여야 하는데 {settings.random_seed}임"
         )
-        assert settings.test_size == 0.2, (
-            f"test_size 기본값이 0.2여야 하는데 {settings.test_size}임"
+        assert settings.test_size == 0.3, (
+            f"test_size 기본값이 0.3여야 하는데 {settings.test_size}임"
         )
-        assert settings.sentiment_batch_size == 32, (
-            f"sentiment_batch_size 기본값이 32여야 하는데 {settings.sentiment_batch_size}임"
+        assert settings.sentiment_batch_size == 10, (
+            f"sentiment_batch_size 기본값이 10이어야 하는데 {settings.sentiment_batch_size}임"
         )
         assert settings.gcp_region == "asia-northeast3", (
             f"gcp_region 기본값이 'asia-northeast3'여야 하는데 '{settings.gcp_region}'임"

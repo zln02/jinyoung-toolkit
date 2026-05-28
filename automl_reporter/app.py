@@ -14,6 +14,7 @@ from automl_reporter.feature_inspector import FeatureInspector
 from automl_reporter.report_builder import AutoMLReportBuilder
 from automl_reporter.runner import AutoMLConfig, AutoMLResult, AutoMLRunner, TaskType
 from shared.logger import get_logger
+import shared.visitor_stats as vstats
 from shared.ui_components import (
     render_dataframe_preview,
     render_download_button,
@@ -90,6 +91,10 @@ def _render_step1_upload() -> pd.DataFrame | None:
         업로드 또는 샘플 로드에 성공한 DataFrame. 없으면 None.
     """
     st.subheader("Step 1. 데이터 업로드")
+    st.caption(
+        "CSV 또는 Excel 파일을 올리면 됩니다. 한글이 깨지는 파일(엑셀 cp949)도 자동으로 인식해요. "
+        "처음이면 '샘플로 먼저 보기'로 체험해 보세요."
+    )
 
     input_mode = st.radio(
         "데이터 입력 방식",
@@ -101,7 +106,7 @@ def _render_step1_upload() -> pd.DataFrame | None:
     df: pd.DataFrame | None = None
 
     if input_mode == "파일로 올리기 (CSV)":
-        df = render_file_uploader()
+        df = render_file_uploader(label="분석할 데이터 파일 (CSV·Excel, 한글 OK)")
         if df is not None:
             render_dataframe_preview(df)
     else:
@@ -124,19 +129,19 @@ def _render_step1_upload() -> pd.DataFrame | None:
 
 def _render_step2_settings(
     df: pd.DataFrame,
-) -> tuple[str | None, TaskType | None]:
-    """Step 2: 타겟 컬럼과 문제 유형 설정 섹션을 렌더링한다.
+) -> tuple[str | None, TaskType | None, list[str]]:
+    """Step 2: 타겟 컬럼·문제 유형·텍스트 피처 설정 섹션을 렌더링한다.
 
-    FeatureInspector로 추천 타겟을 제안하고, 사용자가 selectbox로
-    타겟 컬럼과 문제 유형을 선택할 수 있도록 UI를 제공한다.
+    FeatureInspector로 추천 타겟을 제안하고, 텍스트(object) 컬럼이 있으면
+    '텍스트 피처 포함' 옵션을 제공한다(숫자 컬럼이 부족한 텍스트 위주 데이터 대응).
 
     Args:
         df: 설정 대상 DataFrame.
 
     Returns:
-        (target_column, task_type) 튜플.
-        target_column은 군집화 선택 시 None.
-        task_type은 자동 감지 선택 시 None.
+        (target_column, task_type, text_columns) 튜플.
+        target_column은 군집화 선택 시 None, task_type은 자동 감지 시 None,
+        text_columns는 텍스트 피처 미사용 시 빈 리스트.
     """
     st.subheader("Step 2. 분석 설정")
 
@@ -189,7 +194,39 @@ def _render_step2_settings(
             "문제 유형을 '군집화' 또는 '자동 감지'로 변경해 주세요."
         )
 
-    return target_column, task_type
+    # 텍스트 피처 — object/category 컬럼(타깃 제외)이 있으면 옵션 노출
+    text_columns: list[str] = []
+    text_candidates = [
+        c
+        for c in columns
+        if c != target_column
+        and (df[c].dtype == object or str(df[c].dtype) == "category")
+    ]
+    if text_candidates:
+        use_text = st.checkbox(
+            "📝 텍스트 피처 포함 (리뷰·설명 등 글자 데이터를 분석에 사용)",
+            value=False,
+            help=(
+                "숫자 컬럼이 거의 없는 텍스트 위주 데이터라면 켜세요. "
+                "한국어 형태소 분석 후 TF-IDF로 변환해 모델 입력으로 씁니다."
+            ),
+        )
+        if use_text:
+            try:
+                default_text = max(
+                    text_candidates,
+                    key=lambda c: df[c].astype(str).str.len().mean(),
+                )
+            except Exception:
+                default_text = text_candidates[0]
+            text_columns = st.multiselect(
+                "텍스트 컬럼 선택",
+                options=text_candidates,
+                default=[default_text],
+                help="분석에 사용할 텍스트 컬럼(여러 개 선택 가능).",
+            )
+
+    return target_column, task_type, text_columns
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +238,7 @@ def _run_automl(
     df: pd.DataFrame,
     target_column: str | None,
     task_type: TaskType | None,
+    text_columns: list[str] | None = None,
 ) -> AutoMLResult:
     """임시 CSV를 생성하고 AutoMLRunner를 실행한다.
 
@@ -208,6 +246,7 @@ def _run_automl(
         df: 학습에 사용할 DataFrame.
         target_column: 타겟 컬럼명. None이면 군집화.
         task_type: 문제 유형. None이면 자동 감지.
+        text_columns: 텍스트 피처로 쓸 컬럼들. 있으면 TF-IDF 변환해 모델 입력에 포함.
 
     Returns:
         AutoMLResult 인스턴스.
@@ -220,6 +259,8 @@ def _run_automl(
         df.to_csv(tmp_csv, index=False, encoding="utf-8-sig")
 
         config = AutoMLConfig(
+            include_text_features=bool(text_columns),
+            text_columns=list(text_columns or []),
             input_path=tmp_csv,
             target_column=target_column,
             task_type=task_type,
@@ -524,7 +565,7 @@ def main() -> None:
     st.divider()
 
     # Step 2: 분석 설정
-    target_column, task_type = _render_step2_settings(working_df)
+    target_column, task_type, text_columns = _render_step2_settings(working_df)
 
     # 타겟이 없는데 분류/회귀를 선택한 경우 실행 버튼 비활성화
     run_disabled = target_column is None and task_type not in (
@@ -537,8 +578,11 @@ def main() -> None:
     if st.button("실행", type="primary", disabled=run_disabled):
         with st.spinner("AutoML 분석 중... 잠시 기다려 주세요."):
             try:
-                result = _run_automl(working_df, target_column, task_type)
+                result = _run_automl(
+                    working_df, target_column, task_type, text_columns
+                )
                 st.session_state[_SESSION_RESULT] = result
+                vstats.record_activity("AutoML")
                 st.success(
                     f"완료! 최적 모델: {result.best_model_name} "
                     f"({_TASK_TYPE_KR.get(result.task_type, result.task_type.value)})"
