@@ -584,6 +584,16 @@ def main() -> None:
                     st.success(
                         f"🎉 샘플 자동 분석 완료! 최적 모델: {_result.best_model_name}"
                     )
+                    # 분석 성공 보상감 ✨ (주 지표 0.9 이상이면 눈 효과)
+                    _top = (
+                        next(iter(_result.best_metrics.values()))
+                        if _result.best_metrics
+                        else 0
+                    )
+                    if isinstance(_top, (int, float)) and _top >= 0.9:
+                        st.snow()
+                    else:
+                        st.balloons()
             except Exception as exc:
                 log.error("샘플 자동 분석 실패", error=str(exc))
 
@@ -633,6 +643,16 @@ def main() -> None:
                     f"완료! 최적 모델: {result.best_model_name} "
                     f"({_TASK_TYPE_KR.get(result.task_type, result.task_type.value)})"
                 )
+                # 분석 성공 보상감 ✨ (주 지표 0.9 이상 = 매우 우수면 눈 효과)
+                _top = (
+                    next(iter(result.best_metrics.values()))
+                    if result.best_metrics
+                    else 0
+                )
+                if isinstance(_top, (int, float)) and _top >= 0.9:
+                    st.snow()
+                else:
+                    st.balloons()
             except Exception as exc:
                 log.error("AutoML_실행_실패", error=str(exc))
                 render_error(exc, context="AutoML")
