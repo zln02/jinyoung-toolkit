@@ -133,12 +133,33 @@ def _is_private_host(url: str) -> bool:
 
 
 def _match_hint(col_lower: str, hint: str) -> bool:
-    """단어 경계 매칭. 'reviewer' 안의 'review' 처럼 부분일치 오탐을 막는다."""
+    """힌트 매칭. 영문은 단어 경계(reviewer 오탐 방지), 한글은 부분일치 허용.
+
+    한글에는 단어 경계 개념이 없어 '번역내용(한국어)' 같은 합성 컬럼명에서
+    '내용' 힌트를 놓치고 자동 추천이 엉뚱한 컬럼으로 가는 문제를 해결한다.
+    """
+    if any("가" <= ch <= "힣" for ch in hint):
+        return hint in col_lower
     return re.search(rf"(^|[_\s\-]){re.escape(hint)}([_\s\-]|$)", col_lower) is not None
 
 
+def _korean_ratio(series: pd.Series) -> float:
+    """문자열 컬럼의 한글 음절 비율(0.0~1.0). 한국어 분석기에 적합한 컬럼 가중치."""
+    text = "".join(series.dropna().astype(str).head(50).tolist())
+    if not text:
+        return 0.0
+    korean = sum(1 for ch in text if "가" <= ch <= "힣")
+    return korean / len(text)
+
+
 def guess_text_column(df: pd.DataFrame) -> str | None:
-    """텍스트(리뷰 내용) 컬럼을 휴리스틱으로 추측."""
+    """텍스트(리뷰 내용) 컬럼을 휴리스틱으로 추측.
+
+    1) hint 정확 일치 → 즉시 반환
+    2) hint 매칭 컬럼이 여러 개면 한글 비율 최대 우선 (한국어 형태소 분석기 도구이므로
+       '원본내용(영어)'·'번역내용(한국어)' 같이 둘 다 매칭되면 한국어 컬럼을 고른다)
+    3) 매칭 0개면 평균 길이 최대 object 컬럼 fallback
+    """
     cols = list(df.columns)
     cols_lower = [(c, str(c).lower()) for c in cols]
 
@@ -146,9 +167,16 @@ def guess_text_column(df: pd.DataFrame) -> str | None:
         for col, col_lower in cols_lower:
             if col_lower == hint:
                 return col
+
+    candidates: list[str] = []
+    for hint in TEXT_HINTS:
         for col, col_lower in cols_lower:
-            if _match_hint(col_lower, hint):
-                return col
+            if _match_hint(col_lower, hint) and col not in candidates:
+                candidates.append(col)
+    if candidates:
+        if len(candidates) == 1:
+            return candidates[0]
+        return max(candidates, key=lambda c: _korean_ratio(df[c]))
 
     object_cols = [c for c in cols if df[c].dtype == object]
     if not object_cols:
