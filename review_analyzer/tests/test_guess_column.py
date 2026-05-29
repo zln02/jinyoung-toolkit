@@ -37,6 +37,35 @@ def test_guess_text_column_word_boundary() -> None:
     assert _guess_text_column(df) == "review"
 
 
+def test_guess_text_column_korean_partial_match_picks_korean() -> None:
+    """ThinQ CSV 회귀 — '원본내용(영어)'·'번역내용(한국어)' 둘 다 '내용' hint에 매칭되면
+    한글 비율 더 높은 한국어 컬럼이 선택돼야 한다.
+
+    이전엔 (1) 단어 경계 regex가 한글에서 작동 안 해 둘 다 매칭 실패 →
+    (2) 평균 길이 fallback으로 영어 원문이 선택돼 한국어 형태소 분석기에서 빈 결과 나오던 버그.
+    """
+    df = pd.DataFrame(
+        {
+            "플랫폼": ["HN"],
+            "원본내용(영어)": ["very long english text " * 20],
+            "번역내용(한국어)": ["한국어 번역 본문이 여기 들어갑니다"],
+        }
+    )
+    assert _guess_text_column(df) == "번역내용(한국어)"
+
+
+def test_guess_text_column_korean_hint_single_match() -> None:
+    """한글 hint가 한 컬럼에만 매칭되면 그 컬럼 반환(다른 매칭이 없는 케이스)."""
+    df = pd.DataFrame(
+        {
+            "user_id": [1],
+            "리뷰_본문": ["좋아요"],
+            "score": [5],
+        }
+    )
+    assert _guess_text_column(df) == "리뷰_본문"
+
+
 def test_guess_rating_column_prefers_rating_over_random_numeric() -> None:
     """'rating' 이 다른 숫자 컬럼보다 hint 우선순위가 높아야 한다."""
     df = pd.DataFrame(
