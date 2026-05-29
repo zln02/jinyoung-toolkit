@@ -79,6 +79,7 @@ def main() -> None:
                         st.session_state[_SESSION_CFG] = ("content", "rating", None)
                         vstats.record_activity("샘플 데모(리뷰)")
                         st.success("🎉 샘플 자동 분석 완료! 아래에서 결과를 확인하세요.")
+                        st.balloons()
                 except Exception as exc:
                     log.error("샘플 자동 분석 실패", error=str(exc))
 
@@ -128,6 +129,13 @@ def main() -> None:
                         result = analyzer.run(working_df)
                         st.session_state[_SESSION_RESULT] = result
                         vstats.record_activity("리뷰 분석")
+                        # 분석 성공 — 보상감 ✨ (긍정 90%↑면 더 화려한 눈 효과)
+                        _pos = result.sentiment_distribution.get("positive", 0)
+                        _total = result.total_reviews or 1
+                        if _pos / _total >= 0.9:
+                            st.snow()
+                        else:
+                            st.balloons()
                         # 다운로드(ZIP 재분석)가 화면 결과와 일치하도록 분석 시점 설정 보존
                         st.session_state[_SESSION_CFG] = (
                             text_column,

@@ -137,10 +137,14 @@ def _render_cluster(cr: ClusterResult) -> None:
             "자동 선택": "예" if cr.auto_selected else "아니오",
         }
     )
-    # 비전공자용 해석 — silhouette 점수 기준
+    # 비전공자용 해석 + 보상 — silhouette 점수 기준
     if cr.silhouette is not None:
-        if cr.silhouette >= 0.5:
+        if cr.silhouette >= 0.7:
+            st.caption("🌟 **군집이 매우 깔끔하게 나뉘었어요!** (점수 0.7 이상, 보기 드문 결과)")
+            st.balloons()
+        elif cr.silhouette >= 0.5:
             st.caption("✨ **군집이 명확하게 나뉘었어요** (점수 0.5 이상)")
+            st.toast("✨ 군집이 잘 나뉘었어요!", icon="✨")
         elif cr.silhouette >= 0.2:
             st.caption("🙂 **보통 수준의 분리** — 군집이 일부 겹쳐있을 수 있어요")
         else:
