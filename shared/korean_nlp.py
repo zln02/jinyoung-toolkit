@@ -504,20 +504,27 @@ class KoreanTextProcessor:
             "kr",
         ]
 
+        # 키워드를 바깥 루프로 둔다.
+        # 파일을 바깥에 두면 파일명 정렬 순서가 우선순위를 이겨버린다. 실제로
+        # `/usr/share/fonts/truetype/fonts-japanese-gothic.ttf` 가 범용 키워드
+        # "gothic" 에 먼저 걸려, NanumGothic 이 설치돼 있는데도 일본어 폰트가
+        # 선택되어 한글이 두부(□)로 렌더링되는 문제가 있었다.
+        candidates: list[Path] = []
         for font_dir in system_font_dirs:
             if not font_dir.is_dir():
                 continue
-            # 재귀 탐색
             for ext in ("*.ttf", "*.otf", "*.TTF", "*.OTF"):
-                for font_file in sorted(font_dir.rglob(ext)):
-                    name = font_file.name
-                    for kw in korean_keywords:
-                        if kw in name:
-                            log.debug(
-                                "시스템_한글_폰트_발견",
-                                font=str(font_file),
-                            )
-                            return font_file.resolve()
+                candidates.extend(sorted(font_dir.rglob(ext)))
+
+        for kw in korean_keywords:
+            for font_file in candidates:
+                if kw in font_file.name:
+                    log.debug(
+                        "시스템_한글_폰트_발견",
+                        font=str(font_file),
+                        keyword=kw,
+                    )
+                    return font_file.resolve()
 
         # 2단계: 프로젝트 번들 shared/fonts/ 탐색
         bundle_dir = Path(__file__).parent / "fonts"

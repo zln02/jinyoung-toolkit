@@ -6,9 +6,31 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED.svg?logo=docker)](./Dockerfile)
 
-데이터 분석 자동화 도구 모음. 리뷰 감성분석과 AutoML 리포트 생성을 웹 UI 및 CLI로 제공한다.
+한국어 리뷰 분석 + AutoML 리포트 생성 도구. 웹 UI와 CLI 양쪽으로 쓸 수 있다.
 
-🌐 **라이브 데모**: http://34.64.217.243:8501
+<!-- DEMO-LINK:START -->
+> 🌐 **라이브 데모**: 배포 후 이 자리에 링크가 들어갑니다.
+<!-- DEMO-LINK:END -->
+
+## Quickstart
+
+로컬에서 돌리려면 세 줄이면 된다.
+
+```bash
+git clone https://github.com/zln02/jinyoung-toolkit.git && cd jinyoung-toolkit
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+브라우저가 `http://localhost:8501` 로 열린다. 좌측에서 도구를 고르고
+**"샘플로 먼저 보기"** 를 누르면 데이터를 준비하지 않아도 결과물을 볼 수 있다.
+동봉된 샘플은 전부 합성 데이터라 **API 키도, 개인정보도 필요 없다.**
+
+- 리뷰 분석기 샘플: `tests/fixtures/sample_reviews_50.csv` (합성 리뷰 50건)
+- AutoML 샘플: `tests/fixtures/sample_tabular.csv` (합성 수치형 100행 × 10열)
+
+> 크롤링·LLM 셀렉터 추론 같은 선택 기능만 API 키가 필요하다. 자세한 건
+> [환경변수](#환경변수) 참조. 키 없이도 위 샘플 흐름은 전부 동작한다.
 
 ---
 
@@ -79,19 +101,29 @@ jinyoung-toolkit/
 
 ---
 
-## 설치
+## 설치 (가상환경 포함)
+
+[Quickstart](#quickstart) 가 가장 짧은 경로다. 가상환경을 분리하려면 아래를 쓴다.
 
 ```bash
 # 1. 가상환경 생성 및 활성화
 python -m venv .venv
 source .venv/bin/activate
 
-# 2. 의존성 설치
+# 2. 의존성 설치 (requirements.txt는 전 항목 == 고정)
 pip install -r requirements.txt
 
-# 3. 환경변수 설정
+# 3. 환경변수 — 선택 기능을 쓸 때만 필요
 cp .env.example .env
-# .env 파일을 열어 필요한 값을 채운다 (아래 "환경변수" 섹션 참조)
+# 값을 채우지 않아도 샘플 데이터 흐름은 그대로 동작한다
+```
+
+한글 워드클라우드·PDF에는 한글 TrueType 폰트가 필요하다. 없으면 그래프의
+한글이 □ 로 깨진다. Debian/Ubuntu 계열은 아래로 설치한다.
+(Streamlit Community Cloud는 저장소의 `packages.txt` 를 읽어 자동 설치한다.)
+
+```bash
+sudo apt-get install fonts-nanum
 ```
 
 PyCaret을 사용하려면 별도 설치가 필요하다.
@@ -110,7 +142,7 @@ pip install pycaret
 |------|--------|------|
 | `LOG_LEVEL` | `INFO` | 로그 레벨 (DEBUG, INFO, WARNING, ERROR) |
 | `OUTPUT_DIR` | `./output` | 결과물 출력 경로 |
-| `REPORT_AUTHOR` | `박진영` | PDF 리포트 작성자명 |
+| `REPORT_AUTHOR` | (빈 값) | PDF 리포트 작성자명 |
 | `CHROME_DRIVER_PATH` | `auto` | ChromeDriver 경로 (`auto`면 자동 설치) |
 | `CRAWL_DELAY_SECONDS` | `1.5` | 크롤링 요청 간 대기 시간(초) |
 | `MAX_RETRIES` | `3` | 크롤링 재시도 횟수 |
@@ -325,6 +357,30 @@ docker compose up --build
 ```
 
 `http://localhost:8501` 에서 접속 가능하다.
+
+---
+
+## Streamlit Community Cloud 배포
+
+이 저장소는 Streamlit Community Cloud에 그대로 올릴 수 있게 정리돼 있다.
+
+| 항목 | 값 |
+|---|---|
+| Repository | `zln02/jinyoung-toolkit` |
+| Branch | `master` |
+| Main file path | `app.py` |
+| Python version | 3.11 |
+
+배포 시 Streamlit Cloud가 자동으로 읽는 파일:
+
+- `requirements.txt` — 파이썬 의존성 (전 항목 `==` 고정)
+- `packages.txt` — apt 패키지. 한글 폰트(`fonts-nanum`)를 설치해
+  워드클라우드·PDF의 한글이 깨지지 않게 한다
+- `.streamlit/config.toml` — 테마 설정
+
+**Secrets는 설정하지 않아도 된다.** 샘플 데이터 흐름은 외부 API를 호출하지 않는다.
+크롤링·LLM 셀렉터 추론까지 쓰려면 앱 설정의 Secrets에 `.env.example` 의 키를
+같은 이름으로 넣으면 된다.
 
 ---
 

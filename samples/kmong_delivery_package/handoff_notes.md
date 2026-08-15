@@ -15,19 +15,19 @@
 
 | 파일명 | 경로 | 용도 | 크기 |
 |--------|------|------|------|
-| `kmong_product_copy.md` | `/home/wlsdud5035/jinyoung-toolkit/docs/kmong_product_copy.md` | 크몽 상품 카피, 가격 정책, 차별화 포인트 | ~15KB |
-| `kmong_faq.md` | `/home/wlsdud5035/jinyoung-toolkit/docs/kmong_faq.md` | 자주 묻는 질문 25개 (Q&A) | ~30KB |
-| `handoff_notes.md` (본 파일) | `/home/wlsdud5035/jinyoung-toolkit/samples/kmong_delivery_package/handoff_notes.md` | 인계 노트 & 체크리스트 | ~20KB |
+| `kmong_product_copy.md` | `./docs/kmong_product_copy.md` | 크몽 상품 카피, 가격 정책, 차별화 포인트 | ~15KB |
+| `kmong_faq.md` | `./docs/kmong_faq.md` | 자주 묻는 질문 25개 (Q&A) | ~30KB |
+| `handoff_notes.md` (본 파일) | `./samples/kmong_delivery_package/handoff_notes.md` | 인계 노트 & 체크리스트 | ~20KB |
 
 ### 📊 샘플 산출물 (4차 세션 기준)
 
 | 경로 | 용도 | 비고 |
 |------|------|------|
-| `/home/wlsdud5035/jinyoung-toolkit/samples/demo_eleven_st/` | 11번가 단일 제품 크롤링 + 단일 리뷰 분석 PDF | Phase 1 완성 |
-| `/home/wlsdud5035/jinyoung-toolkit/samples/demo_comparison_roborock/comparison_report.pdf` | **프리미엄 경쟁사 비교 리포트 (3페이지, 4개 제품 입력 → 0건 자동 제외 + 권장 개선 포인트 4개)** | 4차 세션 Wave A 사후 재생성 — `failed_products` / 평점 파싱 / 새 제목 모두 적용 |
-| `/home/wlsdud5035/jinyoung-toolkit/samples/demo_comparison_roborock/*_crawled.csv` | 4개 제품 원본 리뷰 데이터 (3개는 18행, 디베이는 0행 = 실패 사례) | — |
-| `/home/wlsdud5035/jinyoung-toolkit/samples/demo_comparison_roborock/summary.md` | 샘플 실행 요약, PDF 개선 체크리스트 | 갱신본 |
-| `/home/wlsdud5035/jinyoung-toolkit/samples/archive/demo_comparison_roborock_v1_pre_fix/` | 4월 7일 첫 생성본 (구 PDF, nan 노출 등 — 과거 비교용) | 보존만 |
+| `./samples/demo_eleven_st/` | 11번가 단일 제품 크롤링 + 단일 리뷰 분석 PDF | Phase 1 완성 |
+| `./samples/demo_comparison_roborock/comparison_report.pdf` | **프리미엄 경쟁사 비교 리포트 (3페이지, 4개 제품 입력 → 0건 자동 제외 + 권장 개선 포인트 4개)** | 4차 세션 Wave A 사후 재생성 — `failed_products` / 평점 파싱 / 새 제목 모두 적용 |
+| `./samples/demo_comparison_roborock/*_crawled.csv` | 4개 제품 원본 리뷰 데이터 (3개는 18행, 디베이는 0행 = 실패 사례) | — |
+| `./samples/demo_comparison_roborock/summary.md` | 샘플 실행 요약, PDF 개선 체크리스트 | 갱신본 |
+| `./samples/archive/demo_comparison_roborock_v1_pre_fix/` | 4월 7일 첫 생성본 (구 PDF, nan 노출 등 — 과거 비교용) | 보존만 |
 
 **Amazon 라이브 샘플은 4차 세션 시점에 GCP IP 차단으로 보류**. 11번가 샘플이 실서비스 톤을 그대로 보여줍니다.
 

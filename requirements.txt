@@ -1,49 +1,49 @@
 # Core
-pydantic>=2.5
-pydantic-settings>=2.1
-pyyaml>=6.0
-structlog>=24.1
-rich>=13.7
-typer>=0.9
+pydantic==2.13.4
+pydantic-settings==2.15.0
+pyyaml==6.0.3
+structlog==26.1.0
+rich==15.0.0
+typer==0.27.1
 
 # Data
-pandas>=2.2
-numpy>=1.26
-openpyxl>=3.1
+pandas==3.0.5
+numpy==2.5.2
+openpyxl==3.1.5
 
 # NLP (핵심 차별점)
-kiwipiepy>=0.18
-wordcloud>=1.9
+kiwipiepy==0.23.2
+wordcloud==1.9.6
 
 # Visualization
-matplotlib>=3.8
-seaborn>=0.13
-plotly>=5.18,<6.0
+matplotlib==3.11.1
+seaborn==0.13.2
+plotly==5.24.1
 
 # Report
-fpdf2>=2.7
+fpdf2==2.8.8
 
 # UI
-streamlit>=1.31
+streamlit==1.61.1
 
 # Crawling
-httpx>=0.27
-beautifulsoup4>=4.12
-lxml>=5.1
+httpx==0.28.1
+beautifulsoup4==4.15.0
+lxml==6.1.1
 
 # LLM (자동 셀렉터 추론용)
-anthropic>=0.40
+anthropic==0.122.0
 
 # ML
-scikit-learn>=1.4
+scikit-learn==1.9.0
 
 # Testing
-pytest>=8.0
-pytest-cov>=4.1
-pytest-asyncio>=0.23
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-asyncio==1.4.0
 
 # Lint/Format
-ruff>=0.4
+ruff==0.16.3
 
 # Security (의존성 취약점 스캔)
-pip-audit>=2.7
+pip-audit==2.10.1
